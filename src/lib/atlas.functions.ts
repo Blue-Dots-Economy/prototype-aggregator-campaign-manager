@@ -69,6 +69,7 @@ export interface AtlasBuildInput {
   // Urgency is optional — absent data leaves ATLAS behaving exactly as before.
   urgencyWeight?: number | null;
   urgencyMin?: number | null;
+  matchMin?: number | null; // 0–10, job-first (KKB) only
 }
 
 interface SampleRow {
@@ -76,6 +77,7 @@ interface SampleRow {
   confidence: number | null; total_campaigns: number; last_call_date: string;
   avg_intent: number | null; max_intent: number | null; avg_match: number | null;
   urgency?: number | null; urgency_reason?: string | null;
+  match_score?: number | null; match_reason?: string | null; job_item_id?: string | null;
 }
 
 const num = (v: unknown) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
@@ -113,15 +115,31 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
 
     const client = masterClient();
     if (!client) throw new Error("Master record source isn't configured.");
-    const { data: res, error } = await client.rpc("pick_preview", {
-      _program: data.program,
-      _confidence_min: data.confidenceMin ?? null,
-      _max_campaigns: data.maxCampaigns ?? null,
-      _cooldown_days: data.cooldownDays ?? null,
-      _region: data.region || null,
-    });
+    const matchMin = data.matchMin == null || (data.matchMin as any) === "" || isNaN(Number(data.matchMin)) ? null : Math.max(0, Math.min(10, Number(data.matchMin)));
+    // KKB: job-urgency-first engine (urgent open jobs → matched seekers). DKB: unchanged pick_preview.
+    const { data: res, error } = data.program === "kkb"
+      ? await client.rpc("atlas_jobfirst_preview", {
+          _program: "kkb",
+          _confidence_min: data.confidenceMin ?? null,
+          _max_campaigns: data.maxCampaigns ?? null,
+          _cooldown_days: data.cooldownDays ?? null,
+          _region: data.region || null,
+          _urgency_min: urgencyMin ?? null,
+          _match_min: matchMin,
+          _max_jobs: 2000,
+        })
+      : await client.rpc("pick_preview", {
+          _program: data.program,
+          _confidence_min: data.confidenceMin ?? null,
+          _max_campaigns: data.maxCampaigns ?? null,
+          _cooldown_days: data.cooldownDays ?? null,
+          _region: data.region || null,
+        });
     if (error) throw new Error(error.message);
-    const p = (res ?? {}) as { count?: number; regions?: string[]; confidenceAvailable?: boolean; sample?: SampleRow[] };
+    const p = (res ?? {}) as { count?: number; regions?: string[]; confidenceAvailable?: boolean; sample?: SampleRow[]; mode?: string; stages?: { urgentJobs?: number; matchedSeekers?: number; selected?: number } };
+    const mode = p.mode === "jobfirst" ? "jobfirst" : "pick";
+    const st = p.stages && typeof p.stages === "object" ? p.stages : null;
+    const stages = st ? { urgentJobs: num(st.urgentJobs), matchedSeekers: num(st.matchedSeekers), selected: num(st.selected) } : null;
     const matched = Number(p.count ?? 0);
     const totalCount = Math.min(matched, budget);
     const sample = Array.isArray(p.sample) ? p.sample : [];
@@ -141,6 +159,9 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const ds = daysSince(r.last_call_date);
       const urg = num(r.urgency);
       const urgReason = r.urgency_reason ?? null;
+      const mScore = num(r.match_score);
+      const mReason = r.match_reason ?? null;
+      const jobId = r.job_item_id ?? null;
       let s = 0;
       s += (conf ?? 5) / 10 * 40;
       s += (intent != null ? Math.min(intent, 10) / 10 : 0.4) * 30;
@@ -151,7 +172,8 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
         const urgNorm = (Math.max(-2, Math.min(5, urg)) + 2) / 7;
         s += urgNorm * urgencyWeight;
       }
-      return { r, conf, intent, match, camps, ds, urg, urgReason, score: s };
+      if (mScore != null) s += (Math.min(10, Math.max(0, mScore)) / 10) * 15; // match-quality nudge
+      return { r, conf, intent, match, camps, ds, urg, urgReason, mScore, mReason, jobId, score: s };
     });
 
     const kExplore = Math.round((scored.length * explorePct) / 100);
@@ -169,12 +191,17 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       else if (x.match != null && x.match >= 6) reason = "Good job match on record";
       else reason = "Meets your filters; moderate signal";
       if (isUrgent) reason = `Urgent — ${x.urgReason || "high job urgency"}; ${reason}`;
+      if (mode === "jobfirst" && (x.urg != null || x.mScore != null)) {
+        reason = `Called for an urgent job — ${x.urgReason || "open, unfilled role"}; match ${x.mScore ?? "—"}/10${x.mReason ? ` (${x.mReason})` : ""}`;
+        if (isExp) reason += " · exploration";
+      }
       return {
         phone_masked: x.r.phone_masked, region: x.r.region, district: x.r.district,
         category: hasVal(x.r.category) ? x.r.category : null,
         confidence: x.conf, total_campaigns: x.camps, last_call_date: x.r.last_call_date,
         intent: x.intent, match: x.match, priority_score: score, reason, is_exploration: isExp,
         urgency: x.urg, urgency_reason: x.urgReason, is_urgent: isUrgent,
+        match_score: x.mScore, match_reason: x.mReason, matched_job_id: x.jobId,
       };
     }).sort((a, b) => b.priority_score - a.priority_score);
 
@@ -205,6 +232,8 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
         : "Urgency data isn't available yet, so I've ranked on confidence, intent and history. ";
     const narration = totalCount === 0
       ? `I looked for people in ${regionLabel} who meet these filters and found no one. I'd suggest loosening the confidence threshold or cooldown before trying again.`
+      : mode === "jobfirst"
+      ? `I started from the most urgent, unfilled jobs${stages?.urgentJobs != null ? ` — ${stages.urgentJobs} of them` : ""} — and pulled the seekers who best match them${stages?.matchedSeekers != null ? ` (${stages.matchedSeekers} matched)` : ""}. ${totalCount} people today in ${regionLabel}${capNote}. I've kept about ${expShare} lightly-contacted people in the mix so they aren't overlooked. ${fairnessSentence}. ${urgencySentence}This is my recommendation — you approve before anything runs.`
       : `Here's my plan for ${regionLabel}: ${totalCount} people today${capNote}. Most are strong matches, but I've deliberately included about ${expShare} we haven't reached much — they deserve a shot even if I'm less certain about them. ${fairnessSentence}. ${p.confidenceAvailable ? "" : "Confidence scores are missing for this pool, so my ranking leans on intent and history. "}${urgencySentence}This is my recommendation — you approve before anything runs.`;
 
     const db = stateDb();
@@ -213,7 +242,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       confidence_min: data.confidenceMin ?? null, cooldown_days: data.cooldownDays ?? null,
       max_campaigns: data.maxCampaigns ?? null, explore_pct: explorePct,
       status: "proposed", model_mark: "Mark I", total_count: totalCount,
-      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin }, created_by: actor,
+      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin, matchMin, mode, stages }, created_by: actor,
     }).select("id").single();
     if (insErr) throw new Error(insErr.message);
     const cohortId = (row as any).id as string;
@@ -221,7 +250,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const { error: mErr } = await db.from("atlas_cohort_members").insert(members.map((m) => ({ ...m, cohort_id: cohortId })));
       if (mErr) throw new Error(mErr.message);
     }
-    return { cohortId, totalCount, sampleCount: members.length, exploreCount: kExplore, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed" };
+    return { cohortId, totalCount, sampleCount: members.length, exploreCount: kExplore, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched };
   }
 }
 
@@ -287,7 +316,7 @@ function cleanParams(p: any): Partial<AtlasBuildInput> {
   if (!p || typeof p !== "object") return o;
   if (p.program === "kkb" || p.program === "dkb") o.program = p.program;
   if (typeof p.region === "string" && p.region.trim()) o.region = p.region.trim();
-  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget"] as const) {
+  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget", "matchMin"] as const) {
     if (p[k] != null && !isNaN(Number(p[k]))) (o as any)[k] = Number(p[k]);
   }
   if (p.urgencyMin != null && !isNaN(Number(p.urgencyMin))) o.urgencyMin = Number(p.urgencyMin);

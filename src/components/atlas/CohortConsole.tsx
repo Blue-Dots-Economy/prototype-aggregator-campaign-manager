@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 export type ConsoleCohort = {
   cohortId: string; totalCount: number; sampleCount: number; exploreCount: number; urgentCount: number;
   narration: string; members: any[]; urgencyAvailable: boolean; confidenceAvailable?: boolean; status?: string;
+  mode?: string; stages?: { urgentJobs: number | null; matchedSeekers: number | null; selected: number | null } | null;
   fairness: { byRegion: Record<string, number>; byCategory: Record<string, number>; categoryAvailable: boolean; note: string | null };
 };
 
@@ -80,6 +81,12 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
     ["1–2", urgVals.filter((v) => v > 0 && v < 3).length],
     ["3–5", urgVals.filter((v) => v >= 3).length],
   ];
+  const matchVals = c.members.map((x) => (x.match_score == null ? null : Number(x.match_score))).filter((x): x is number => x != null);
+  const matchB: Array<[string, number]> = [
+    ["<5", matchVals.filter((v) => v < 5).length],
+    ["5–7", matchVals.filter((v) => v >= 5 && v < 8).length],
+    ["8–10", matchVals.filter((v) => v >= 8).length],
+  ];
   const explore: Array<[string, number]> = [["Core", Math.max(0, c.sampleCount - c.exploreCount)], ["Exploration", c.exploreCount]];
 
   const R = 70, C = 2 * Math.PI * R, frac = Math.min(1, c.totalCount / cap);
@@ -110,18 +117,22 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
         {/* Selection reduction */}
         <div className="space-y-2">
           <h4 className="text-sm font-medium" style={muted}>How it was picked</h4>
-          {[
+          {(c.stages ? [
+            { label: "Urgent open jobs", value: c.stages.urgentJobs, hint: "unfilled, by urgency" },
+            { label: "Matched seekers", value: c.stages.matchedSeekers, hint: "fit those jobs" },
+            { label: "Calling", value: c.totalCount, hint: "proposed today" },
+          ] : [
             { label: "Eligible pool", value: matched, hint: matched == null ? "at least the budget" : "after your filters" },
             { label: "Daily budget", value: cap, hint: "hard cap 1000" },
             { label: "Calling", value: c.totalCount, hint: "proposed today" },
-          ].map((s, i, arr) => {
-            const base = Math.max(matched ?? cap, cap, 1);
+          ]).map((s, i, arr) => {
+            const base = c.stages ? Math.max(1, ...arr.map((x) => x.value ?? 0)) : Math.max(matched ?? cap, cap, 1);
             const w = s.value == null ? 100 : Math.max(2, (s.value / base) * 100);
             return (
               <div key={s.label} className="cc-step" style={{ animationDelay: `${i * 220}ms` }}>
                 <div className="flex items-baseline justify-between text-sm">
                   <span>{s.label} <span className="text-xs" style={muted}>· {s.hint}</span></span>
-                  <span className="font-semibold tabular-nums">{s.value == null ? `≥ ${cap}` : s.value}</span>
+                  <span className="font-semibold tabular-nums">{s.value == null ? (c.stages ? "—" : `≥ ${cap}`) : s.value}</span>
                 </div>
                 <div className="mt-1 h-1.5 rounded-full" style={{ background: "rgba(255,255,255,.06)" }}>
                   <div className="cc-arc h-1.5 rounded-full" style={{ width: mounted ? `${w}%` : "0%", transition: reduced ? "none" : `width 900ms ${i * 220}ms cubic-bezier(.2,.8,.2,1)`, background: i === arr.length - 1 ? "#67e8f9" : "#818cf8", opacity: s.value == null ? 0.45 : 1 }} />
@@ -138,6 +149,7 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
         <Dial title="Confidence" data={conf} mounted={mounted} dimNote={c.confidenceAvailable === false || confVals.length === 0 ? "confidence sparse" : undefined} />
         <Dial title="Exploration vs core" data={explore} mounted={mounted} />
         <Dial title="Urgency" data={urg} mounted={mounted} dimNote={!c.urgencyAvailable || urgVals.length === 0 ? "awaiting urgency data" : undefined} />
+        <Dial title="Match" data={matchB} mounted={mounted} dimNote={matchVals.length === 0 ? "no match scores in sample" : undefined} />
         <Dial title="Fairness · category" data={topN(c.fairness.byCategory)} mounted={mounted} dimNote={c.fairness.categoryAvailable ? undefined : "SC/ST data pending"} />
       </div>
 
@@ -158,7 +170,7 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
                 Representative preview of {c.totalCount} — full list is resolved only at dispatch (disabled in this version).
               </caption>
               <thead className="text-xs" style={{ ...muted, background: "rgba(255,255,255,.03)" }}>
-                <tr>{["Phone", "Region", "Category", "Conf.", "Campaigns", "Last call", "Urgency", "Priority", "Why"].map((h) => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr>
+                <tr>{["Phone", "Region", "Category", "Conf.", "Campaigns", "Last call", "Urgency", "Match", "Priority", "Why"].map((h) => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr>
               </thead>
               <tbody>
                 {c.members.map((m, i) => (
@@ -177,6 +189,14 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
                             {m.is_urgent && <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-xs text-amber-200">Urgent</span>}
                           </span>
                           {m.urgency_reason && <span className="text-xs" style={muted}>{m.urgency_reason}</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {m.match_score == null ? <span style={muted}>—</span> : (
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold tabular-nums">{m.match_score}/10</span>
+                          {m.match_reason && <span className="text-xs" style={muted}>{m.match_reason}</span>}
                         </div>
                       )}
                     </td>
