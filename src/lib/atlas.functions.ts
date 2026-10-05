@@ -128,7 +128,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     const { data: res, error } = data.program === "kkb"
       ? await client.rpc("atlas_jobfirst_preview", {
           _program: "kkb",
-          _confidence_min: data.confidenceMin ?? null,
+          _confidence_min: null, // confidence gates only the performance fill (below), never coverage
           _max_campaigns: data.maxCampaigns ?? null,
           _cooldown_days: data.cooldownDays ?? null,
           _region: data.region || null,
@@ -224,8 +224,15 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       open.forEach((g, i) => { quota[g] += Math.floor(spare / open.length) + (i < spare % open.length ? 1 : 0); });
     }
     const picked = new Set<(typeof scored)[number]>();
+    // Reserved coverage picks: NO confidence requirement (under-served people often have no score).
     for (const g of UNDER) pools[g].slice(0, quota[g]).forEach((x) => picked.add(x));
-    for (const x of byScore) { if (picked.size >= cap) break; picked.add(x); }
+    // Performance fill: confidence floor applies here only.
+    const confFloor = data.confidenceMin == null || isNaN(Number(data.confidenceMin)) ? null : Number(data.confidenceMin);
+    for (const x of byScore) {
+      if (picked.size >= cap) break;
+      if (confFloor != null && (x.conf == null || x.conf < confFloor)) continue;
+      picked.add(x);
+    }
 
     const SEG_PREFIX: Record<Segment, string> = {
       uncalled: "First outreach (never called)",

@@ -261,7 +261,7 @@ function AtlasPage() {
                       </div>
                     </Field>
                     <Field label="Region"><TextIn value={region} onChange={setRegion} placeholder="All regions" /></Field>
-                    <NumIn label="Confidence ≥ (0–10)" value={confidenceMin} onChange={setConfidenceMin} min={0} max={10} step={0.5} />
+                    <NumIn label="Confidence ≥ (0–10)" value={confidenceMin} onChange={setConfidenceMin} min={0} max={10} step={0.5} hint="Minimum confidence for the top-score (performance) picks. Under-served seekers reserved by Coverage % (uncalled / unanswered / engaged-not-applied) are exempt, so people with no call history can still be reached." />
                     <NumIn label="Cooldown days" value={cooldownDays} onChange={setCooldownDays} min={0} />
                     <NumIn label="Max campaigns run" value={maxCampaigns} onChange={setMaxCampaigns} min={0} />
                     <Field label="Min urgency" hint="Only include seekers matched to a job at or above this urgency (scale −2 to 5). Leave blank to include everyone. Changes who's included.">
