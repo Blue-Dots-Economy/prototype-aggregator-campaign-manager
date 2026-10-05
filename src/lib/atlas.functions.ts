@@ -250,11 +250,13 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       : urgencyPresent
         ? `${urgentCount} of these match urgent, unfilled jobs. `
         : "Urgency data isn't available yet, so I've ranked on confidence, intent and history. ";
-    const narration = totalCount === 0
+    const cooldownSentence = appliedCooldownExcluded > 0 ? ` I skipped ${appliedCooldownExcluded} who applied within the last ${appliedCooldownDays} days — they'll come back into the pool after that.` : "";
+    const narrationBase = totalCount === 0
       ? `I looked for people in ${regionLabel} who meet these filters and found no one. I'd suggest loosening the confidence threshold or cooldown before trying again.`
       : mode === "jobfirst"
       ? `I started from the most urgent, unfilled jobs${stages?.urgentJobs != null ? ` — ${stages.urgentJobs} of them` : ""} — and pulled the seekers who best match them${stages?.matchedSeekers != null ? ` (${stages.matchedSeekers} matched)` : ""}. ${totalCount} people today in ${regionLabel}${capNote}. I've kept about ${expShare} lightly-contacted people in the mix so they aren't overlooked. ${fairnessSentence}. ${urgencySentence}This is my recommendation — you approve before anything runs.`
       : `Here's my plan for ${regionLabel}: ${totalCount} people today${capNote}. Most are strong matches, but I've deliberately included about ${expShare} we haven't reached much — they deserve a shot even if I'm less certain about them. ${fairnessSentence}. ${p.confidenceAvailable ? "" : "Confidence scores are missing for this pool, so my ranking leans on intent and history. "}${urgencySentence}This is my recommendation — you approve before anything runs.`;
+    const narration = narrationBase + cooldownSentence;
 
     const db = stateDb();
     const { data: row, error: insErr } = await db.from("atlas_cohorts").insert({
