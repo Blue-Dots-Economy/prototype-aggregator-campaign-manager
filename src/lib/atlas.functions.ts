@@ -65,9 +65,7 @@ export interface AtlasBuildInput {
   confidenceMin?: number | null;
   cooldownDays?: number | null;
   maxCampaigns?: number | null;
-  explorePct?: number | null;
   // Urgency is optional — absent data leaves ATLAS behaving exactly as before.
-  urgencyWeight?: number | null;
   urgencyMin?: number | null;
   matchMin?: number | null; // 0–10, job-first (KKB) only
   weightMatch?: number | null;      // weighted-average ranking (default 0.5 — the tie-breaker)
@@ -94,11 +92,7 @@ function daysSince(d: string): number | null {
   const t = Date.parse(d);
   return isNaN(t) ? null : Math.floor((Date.now() - t) / 86400000);
 }
-// Urgency weight: 0..60, default 30. Urgency min: blank/null = filter off.
-function urgencyWeightOf(v: unknown): number {
-  const n = Number(v ?? 30);
-  return Number.isNaN(n) ? 30 : Math.max(0, Math.min(n, 60));
-}
+// Urgency min: blank/null = filter off.
 function urgencyMinOf(v: unknown): number | null {
   if (v == null || v === "") return null;
   const n = Number(v);
@@ -114,9 +108,10 @@ export const atlasBuildCohort = createServerFn({ method: "POST" }).middleware([a
 
 async function buildCohortCore(actor: string, data: AtlasBuildInput) {
   {
+    // Production-sensible defaults: a missing value falls back here (mirrors CHAT_DEFAULTS + the UI).
+    const wNum = (v: unknown, d: number) => { const n = Number(v); return v == null || (v as any) === "" || isNaN(n) ? d : Math.max(0, n); };
     const budget = Math.max(1, Math.min(Number(data.budget ?? BUDGET_CAP) || BUDGET_CAP, BUDGET_CAP));
-    const explorePct = Math.max(0, Math.min(Number(data.explorePct ?? 15), 50));
-    const urgencyWeight = urgencyWeightOf(data.urgencyWeight);
+    const confidenceMin = wNum(data.confidenceMin, 4);
     const urgencyMin = urgencyMinOf(data.urgencyMin);
     const ctl = await getControl();
     if (ctl.killed) throw new Error("ATLAS is halted (kill switch on).");
@@ -138,7 +133,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
         })
       : await client.rpc("pick_preview", {
           _program: data.program,
-          _confidence_min: data.confidenceMin ?? null,
+          _confidence_min: confidenceMin,
           _max_campaigns: data.maxCampaigns ?? null,
           _cooldown_days: data.cooldownDays ?? null,
           _region: data.region || null,
@@ -158,7 +153,6 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     // Applied cooldown: skip people who applied AND were contacted within the window.
     // Never permanent — no/invalid date or older than the window keeps them in.
     // proxy: last_call_date until a per-seeker last_application_date exists
-    const wNum = (v: unknown, d: number) => { const n = Number(v); return v == null || (v as any) === "" || isNaN(n) ? d : Math.max(0, n); };
     const appliedCooldownDays = wNum(data.appliedCooldownDays, 30);
     let appliedCooldownExcluded = 0;
     const usable = appliedCooldownDays <= 0 ? urgOk : urgOk.filter((r) => {
@@ -227,7 +221,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     // Reserved coverage picks: NO confidence requirement (under-served people often have no score).
     for (const g of UNDER) pools[g].slice(0, quota[g]).forEach((x) => picked.add(x));
     // Performance fill: confidence floor applies here only.
-    const confFloor = data.confidenceMin == null || isNaN(Number(data.confidenceMin)) ? null : Number(data.confidenceMin);
+    const confFloor = confidenceMin; // default 4; 0 = no floor
     for (const x of byScore) {
       if (picked.size >= cap) break;
       if (confFloor != null && (x.conf == null || x.conf < confFloor)) continue;
@@ -313,10 +307,10 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     const db = stateDb();
     const { data: row, error: insErr } = await db.from("atlas_cohorts").insert({
       program: data.program, region: data.region || null, budget,
-      confidence_min: data.confidenceMin ?? null, cooldown_days: data.cooldownDays ?? null,
-      max_campaigns: data.maxCampaigns ?? null, explore_pct: explorePct,
+      confidence_min: confidenceMin, cooldown_days: data.cooldownDays ?? null,
+      max_campaigns: data.maxCampaigns ?? null,
       status: "proposed", model_mark: "Mark I", total_count: totalCount,
-      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin, matchMin, mode, stages, weightMatch, weightIntent, weightConfidence, appliedCooldownDays, appliedCooldownExcluded, coveragePct }, created_by: actor,
+      narration, fairness, params: { ...data, budget, confidenceMin, matched, urgencyMin, matchMin, mode, stages, weightMatch, weightIntent, weightConfidence, appliedCooldownDays, appliedCooldownExcluded, coveragePct }, created_by: actor,
     }).select("id").single();
     if (insErr) throw new Error(insErr.message);
     const cohortId = (row as any).id as string;
@@ -330,16 +324,17 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
 
 // ---------------- Conversational layer (shadow mode; never dispatches) ----------------
 const CHAT_DEFAULTS: AtlasBuildInput = {
-  program: "kkb", region: null, confidenceMin: 6, cooldownDays: 30, maxCampaigns: 3,
-  explorePct: 15, urgencyWeight: 30, urgencyMin: null, budget: 1000,
+  program: "kkb", region: null, confidenceMin: 4, matchMin: 3, cooldownDays: 30, maxCampaigns: 3,
+  coveragePct: 40, appliedCooldownDays: 30, weightMatch: 0.5, weightIntent: 0.3, weightConfidence: 0.2,
+  urgencyMin: null, budget: 1000,
 };
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
 const ATLAS_SYSTEM = `You are ATLAS (Automated Targeting, Learning & Allocation System), Mark I, running in SHADOW MODE: you propose daily calling cohorts for a job-seeker program and never place calls. Persona: a calm, fair-minded chief of staff. Speak in first person, briefly show your reasoning, speak up for overlooked people, be honest about missing data, no hype, no exclamation marks. Numbers propose, humans decide.
 
 Read the LATEST user message in the context of the conversation and reply with STRICT JSON only (no markdown):
-{"action":"build"|"clarify"|"answer","params":{"program":"kkb"|"dkb","region":string|null,"confidenceMin":number,"cooldownDays":number,"maxCampaigns":number,"explorePct":number,"urgencyWeight":number,"urgencyMin":number|null,"budget":number},"message":string}
-- "build": the user wants a cohort. Include only params the user implied (e.g. "Ghaziabad" -> region "Ghaziabad"; "high-confidence" -> confidenceMin 8; "most urgent" -> urgencyWeight 60 and urgencyMin 3; "haven't called recently" -> cooldownDays 60 and explorePct 30). confidenceMin is 0-10, urgency scale -2..5, budget max 1000. "message" is one short lead-in sentence.
+{"action":"build"|"clarify"|"answer","params":{"program":"kkb"|"dkb","region":string|null,"confidenceMin":number,"matchMin":number|null,"cooldownDays":number,"maxCampaigns":number,"coveragePct":number,"urgencyMin":number|null,"budget":number},"message":string}
+- "build": the user wants a cohort. Include only params the user implied (e.g. "Ghaziabad" -> region "Ghaziabad"; "high-confidence" -> confidenceMin 8; "most urgent" -> urgencyMin 3; "haven't called recently" -> cooldownDays 60; "reach more people we've under-served" -> coveragePct 60). confidenceMin and matchMin are 0-10, urgency scale -2..5, coveragePct 0-80, budget max 1000. "message" is one short lead-in sentence.
 - "clarify": the request is ambiguous; "message" is one short question.
 - "answer": a question about the last cohort or ATLAS itself; answer from the provided cohort summary, honestly.`;
 
@@ -390,7 +385,7 @@ function cleanParams(p: any): Partial<AtlasBuildInput> {
   if (!p || typeof p !== "object") return o;
   if (p.program === "kkb" || p.program === "dkb") o.program = p.program;
   if (typeof p.region === "string" && p.region.trim()) o.region = p.region.trim();
-  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget", "matchMin", "weightMatch", "weightIntent", "weightConfidence", "appliedCooldownDays", "coveragePct"] as const) {
+  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "budget", "matchMin", "weightMatch", "weightIntent", "weightConfidence", "appliedCooldownDays", "coveragePct"] as const) {
     if (p[k] != null && !isNaN(Number(p[k]))) (o as any)[k] = Number(p[k]);
   }
   if (p.urgencyMin != null && !isNaN(Number(p.urgencyMin))) o.urgencyMin = Number(p.urgencyMin);
