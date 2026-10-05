@@ -141,7 +141,6 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     const st = p.stages && typeof p.stages === "object" ? p.stages : null;
     const stages = st ? { urgentJobs: num(st.urgentJobs), matchedSeekers: num(st.matchedSeekers), selected: num(st.selected) } : null;
     const matched = Number(p.count ?? 0);
-    const totalCount = Math.min(matched, budget);
     const sample = Array.isArray(p.sample) ? p.sample : [];
     // Optional min-urgency filter. With no urgency data this drops nothing unless a
     // threshold was explicitly set — in which case an empty-ish cohort is correct.
@@ -203,7 +202,10 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
         urgency: x.urg, urgency_reason: x.urgReason, is_urgent: isUrgent,
         match_score: x.mScore, match_reason: x.mReason, matched_job_id: x.jobId,
       };
-    }).sort((a, b) => b.priority_score - a.priority_score);
+    }).sort((a, b) => b.priority_score - a.priority_score).slice(0, Math.min(budget, 1000));
+    // Everything below is computed over the actual cohort (top `budget` by priority), not a sample.
+    const totalCount = members.length;
+    const exploreCount = members.filter((m) => m.is_exploration).length;
 
     const byRegion: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
@@ -219,7 +221,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     };
 
     const regionLabel = data.region || "all regions";
-    const expShare = members.length ? Math.round((kExplore / members.length) * totalCount) : 0;
+    const expShare = exploreCount;
     const fairnessSentence = categoryAvailable
       ? `Across the preview, categories are spread as ${Object.entries(byCategory).map(([k, v]) => `${k} ${v}`).join(", ")} — I'd still like a human eye on that balance`
       : "I can't check fairness by category yet because that data isn't available, so treat that part as unverified";
@@ -250,7 +252,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const { error: mErr } = await db.from("atlas_cohort_members").insert(members.map((m) => ({ ...m, cohort_id: cohortId })));
       if (mErr) throw new Error(mErr.message);
     }
-    return { cohortId, totalCount, sampleCount: members.length, exploreCount: kExplore, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched };
+    return { cohortId, totalCount, sampleCount: members.length, exploreCount, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched };
   }
 }
 
