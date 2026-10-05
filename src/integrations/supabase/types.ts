@@ -71,6 +71,9 @@ export type Database = {
           is_urgent: boolean | null
           last_call_date: string | null
           match: number | null
+          match_reason: string | null
+          match_score: number | null
+          matched_job_id: string | null
           phone_masked: string | null
           priority_score: number | null
           reason: string | null
@@ -90,6 +93,9 @@ export type Database = {
           is_urgent?: boolean | null
           last_call_date?: string | null
           match?: number | null
+          match_reason?: string | null
+          match_score?: number | null
+          matched_job_id?: string | null
           phone_masked?: string | null
           priority_score?: number | null
           reason?: string | null
@@ -109,6 +115,9 @@ export type Database = {
           is_urgent?: boolean | null
           last_call_date?: string | null
           match?: number | null
+          match_reason?: string | null
+          match_score?: number | null
+          matched_job_id?: string | null
           phone_masked?: string | null
           priority_score?: number | null
           reason?: string | null

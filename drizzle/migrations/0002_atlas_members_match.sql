@@ -1,0 +1,1 @@
+ALTER TABLE public.atlas_cohort_members ADD COLUMN IF NOT EXISTS match_score numeric, ADD COLUMN IF NOT EXISTS match_reason text, ADD COLUMN IF NOT EXISTS matched_job_id text;
