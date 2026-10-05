@@ -78,6 +78,7 @@ export type Database = {
           priority_score: number | null
           reason: string | null
           region: string | null
+          segment: string | null
           total_campaigns: number | null
           urgency: number | null
           urgency_reason: string | null
@@ -100,6 +101,7 @@ export type Database = {
           priority_score?: number | null
           reason?: string | null
           region?: string | null
+          segment?: string | null
           total_campaigns?: number | null
           urgency?: number | null
           urgency_reason?: string | null
@@ -122,6 +124,7 @@ export type Database = {
           priority_score?: number | null
           reason?: string | null
           region?: string | null
+          segment?: string | null
           total_campaigns?: number | null
           urgency?: number | null
           urgency_reason?: string | null

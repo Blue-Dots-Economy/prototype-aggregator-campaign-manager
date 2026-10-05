@@ -74,7 +74,10 @@ export interface AtlasBuildInput {
   weightIntent?: number | null;     // default 0.3
   weightConfidence?: number | null; // default 0.2
   appliedCooldownDays?: number | null; // default 30; 0 = no cooldown
+  coveragePct?: number | null; // default 40, 0–80: budget share reserved for under-served segments
 }
+
+type Segment = "uncalled" | "unanswered" | "engaged_not_applied" | "warm";
 
 interface SampleRow {
   phone_masked: string; region: string; district: string; category: string;
@@ -190,28 +193,60 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const mv = mScore ?? match;
       const s = mv == null && intent == null && conf == null ? 0
         : 100 * (weightMatch * clamp01(mv) + weightIntent * clamp01(intent) + weightConfidence * clamp01(conf)) / wsum;
-      return { r, conf, intent, match, camps, ds, urg, urgReason, mScore, mReason, jobId, score: s };
+      const blend = s / 100;
+      // Segment: who have we under-served? Absent flags default to "warm".
+      const segment: Segment = r.ever_called === false ? "uncalled"
+        : r.ever_answered === false ? "unanswered"
+        : r.ever_engaged === true && r.ever_applied === false ? "engaged_not_applied"
+        : "warm";
+      // Rough ESTIMATE of apply probability — never a guarantee.
+      const pApply = Math.max(0, Math.min(0.6, 0.06 * (0.3 + 1.4 * blend)));
+      return { r, conf, intent, match, camps, ds, urg, urgReason, mScore, mReason, jobId, score: s, segment, pApply };
     });
 
-    const kExplore = Math.round((scored.length * explorePct) / 100);
-    const byLeast = [...scored].sort((a, b) => a.camps - b.camps || (b.ds ?? 0) - (a.ds ?? 0));
-    const exploreSet = new Set(byLeast.slice(0, kExplore));
+    // Stratified coverage selection: reserve coveragePct of the budget for the three
+    // under-served segments (split evenly, leftovers redistributed), then fill by top score.
+    const cap = Math.min(budget, 1000);
+    const coveragePct = Math.max(0, Math.min(80, wNum(data.coveragePct, 40)));
+    const byScore = [...scored].sort((a, b) => b.score - a.score);
+    const UNDER: Segment[] = ["uncalled", "unanswered", "engaged_not_applied"];
+    const pools = Object.fromEntries(UNDER.map((g) => [g, byScore.filter((x) => x.segment === g)])) as Record<Segment, typeof scored>;
+    const quota: Record<string, number> = {};
+    let reserved = Math.min(cap, Math.round((cap * coveragePct) / 100));
+    UNDER.forEach((g, i) => { quota[g] = Math.floor(reserved / 3) + (i < reserved % 3 ? 1 : 0); });
+    // Redistribute shortfalls among under-served segments that still have room.
+    for (let guard = 0; guard < 5; guard++) {
+      let spare = 0;
+      for (const g of UNDER) { const short = quota[g] - pools[g].length; if (short > 0) { spare += short; quota[g] = pools[g].length; } }
+      if (!spare) break;
+      const open = UNDER.filter((g) => pools[g].length > quota[g]);
+      if (!open.length) break; // leftover flows to the performance pool
+      open.forEach((g, i) => { quota[g] += Math.floor(spare / open.length) + (i < spare % open.length ? 1 : 0); });
+    }
+    const picked = new Set<(typeof scored)[number]>();
+    for (const g of UNDER) pools[g].slice(0, quota[g]).forEach((x) => picked.add(x));
+    for (const x of byScore) { if (picked.size >= cap) break; picked.add(x); }
 
-    const members = scored.map((x) => {
-      const isExp = exploreSet.has(x);
-      const score = Math.round(x.score + (isExp ? 10 : 0));
+    const SEG_PREFIX: Record<Segment, string> = {
+      uncalled: "First outreach (never called)",
+      unanswered: "Called before, never answered — retry",
+      engaged_not_applied: "Engaged but hasn't applied — nudge",
+      warm: "",
+    };
+    const members = [...picked].map((x) => {
+      const isExp = x.segment !== "warm";
+      const score = Math.round(x.score);
       const isUrgent = x.urg != null && x.urg >= 3;
       let reason: string;
-      if (isExp) reason = x.camps === 0 ? "Never reached by a campaign — exploration" : x.ds != null && x.ds > 30 ? "Not called in a while — exploration" : "Lightly contacted so far — exploration";
-      else if (x.conf != null && x.conf >= 8 && (x.intent ?? 0) >= 6) reason = "Strong confidence and clear intent";
+      if (x.conf != null && x.conf >= 8 && (x.intent ?? 0) >= 6) reason = "Strong confidence and clear intent";
       else if (x.camps >= 2 && (x.intent ?? 0) >= 5) reason = `Engaged across ${x.camps} campaigns, still showing intent — worth a nudge`;
       else if (x.match != null && x.match >= 6) reason = "Good job match on record";
       else reason = "Meets your filters; moderate signal";
       if (isUrgent) reason = `Urgent — ${x.urgReason || "high job urgency"}; ${reason}`;
       if (mode === "jobfirst" && (x.urg != null || x.mScore != null)) {
         reason = `Called for an urgent job — ${x.urgReason || "open, unfilled role"}; match ${x.mScore ?? "—"}/10${x.mReason ? ` (${x.mReason})` : ""}`;
-        if (isExp) reason += " · exploration";
       }
+      if (SEG_PREFIX[x.segment]) reason = `${SEG_PREFIX[x.segment]} · ${reason}`;
       return {
         phone_masked: x.r.phone_masked, region: x.r.region, district: x.r.district,
         category: hasVal(x.r.category) ? x.r.category : null,
@@ -219,11 +254,21 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
         intent: x.intent, match: x.match, priority_score: score, reason, is_exploration: isExp,
         urgency: x.urg, urgency_reason: x.urgReason, is_urgent: isUrgent,
         match_score: x.mScore, match_reason: x.mReason, matched_job_id: x.jobId,
+        segment: x.segment as string, _p: x.pApply,
       };
-    }).sort((a, b) => b.priority_score - a.priority_score).slice(0, Math.min(budget, 1000));
-    // Everything below is computed over the actual cohort (top `budget` by priority), not a sample.
+    }).sort((a, b) => b.priority_score - a.priority_score);
     const totalCount = members.length;
-    const exploreCount = members.filter((m) => m.is_exploration).length;
+    const exploreCount = members.filter((m) => m.segment !== "warm").length;
+    const segCounts = { uncalled: 0, unanswered: 0, engaged_not_applied: 0, warm: 0 } as Record<Segment, number>;
+    for (const m of members) segCounts[m.segment as Segment]++;
+
+    // Expected applications — a rough estimate, not a guarantee.
+    const expectedApplications = Math.round(members.reduce((t, m) => t + m._p, 0));
+    const jobSum = new Map<string, number>();
+    for (const m of members) if (m.matched_job_id) jobSum.set(m.matched_job_id, (jobSum.get(m.matched_job_id) ?? 0) + m._p);
+    const jobsCovered = jobSum.size;
+    const expectedByJob = [...jobSum.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([job_item_id, v]) => ({ job_item_id, expected: Math.round(v) }));
+    for (const m of members) delete (m as any)._p;
 
     const byRegion: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
@@ -239,7 +284,6 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     };
 
     const regionLabel = data.region || "all regions";
-    const expShare = exploreCount;
     const fairnessSentence = categoryAvailable
       ? `Across the preview, categories are spread as ${Object.entries(byCategory).map(([k, v]) => `${k} ${v}`).join(", ")} — I'd still like a human eye on that balance`
       : "I can't check fairness by category yet because that data isn't available, so treat that part as unverified";
@@ -250,13 +294,14 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       : urgencyPresent
         ? `${urgentCount} of these match urgent, unfilled jobs. `
         : "Urgency data isn't available yet, so I've ranked on confidence, intent and history. ";
+    const coverageSentence = totalCount > 0 && exploreCount > 0 ? ` To stay fair I've reserved room for people we've under-served: ${segCounts.uncalled} never-called, ${segCounts.unanswered} never-answered, ${segCounts.engaged_not_applied} engaged-but-not-applied.` : "";
     const cooldownSentence = appliedCooldownExcluded > 0 ? ` I skipped ${appliedCooldownExcluded} who applied within the last ${appliedCooldownDays} days — they'll come back into the pool after that.` : "";
     const narrationBase = totalCount === 0
       ? `I looked for people in ${regionLabel} who meet these filters and found no one. I'd suggest loosening the confidence threshold or cooldown before trying again.`
       : mode === "jobfirst"
-      ? `I started from the most urgent, unfilled jobs${stages?.urgentJobs != null ? ` — ${stages.urgentJobs} of them` : ""} — and pulled the seekers who best match them${stages?.matchedSeekers != null ? ` (${stages.matchedSeekers} matched)` : ""}. ${totalCount} people today in ${regionLabel}${capNote}. I've kept about ${expShare} lightly-contacted people in the mix so they aren't overlooked. ${fairnessSentence}. ${urgencySentence}This is my recommendation — you approve before anything runs.`
-      : `Here's my plan for ${regionLabel}: ${totalCount} people today${capNote}. Most are strong matches, but I've deliberately included about ${expShare} we haven't reached much — they deserve a shot even if I'm less certain about them. ${fairnessSentence}. ${p.confidenceAvailable ? "" : "Confidence scores are missing for this pool, so my ranking leans on intent and history. "}${urgencySentence}This is my recommendation — you approve before anything runs.`;
-    const narration = narrationBase + cooldownSentence;
+      ? `I started from the most urgent, unfilled jobs${stages?.urgentJobs != null ? ` — ${stages.urgentJobs} of them` : ""} — and pulled the seekers who best match them${stages?.matchedSeekers != null ? ` (${stages.matchedSeekers} matched)` : ""}. ${totalCount} people today in ${regionLabel}${capNote}. ${fairnessSentence}. ${urgencySentence}This is my recommendation — you approve before anything runs.`
+      : `Here's my plan for ${regionLabel}: ${totalCount} people today${capNote}. ${fairnessSentence}. ${p.confidenceAvailable ? "" : "Confidence scores are missing for this pool, so my ranking leans on intent and history. "}${urgencySentence}This is my recommendation — you approve before anything runs.`;
+    const narration = narrationBase + coverageSentence + cooldownSentence;
 
     const db = stateDb();
     const { data: row, error: insErr } = await db.from("atlas_cohorts").insert({
@@ -264,7 +309,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       confidence_min: data.confidenceMin ?? null, cooldown_days: data.cooldownDays ?? null,
       max_campaigns: data.maxCampaigns ?? null, explore_pct: explorePct,
       status: "proposed", model_mark: "Mark I", total_count: totalCount,
-      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin, matchMin, mode, stages, weightMatch, weightIntent, weightConfidence, appliedCooldownDays, appliedCooldownExcluded }, created_by: actor,
+      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin, matchMin, mode, stages, weightMatch, weightIntent, weightConfidence, appliedCooldownDays, appliedCooldownExcluded, coveragePct }, created_by: actor,
     }).select("id").single();
     if (insErr) throw new Error(insErr.message);
     const cohortId = (row as any).id as string;
@@ -272,7 +317,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const { error: mErr } = await db.from("atlas_cohort_members").insert(members.map((m) => ({ ...m, cohort_id: cohortId })));
       if (mErr) throw new Error(mErr.message);
     }
-    return { cohortId, totalCount, sampleCount: members.length, exploreCount, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched, appliedCooldownExcluded };
+    return { cohortId, totalCount, sampleCount: members.length, exploreCount, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched, appliedCooldownExcluded, segCounts, expectedApplications, expectedByJob, jobsCovered };
   }
 }
 
@@ -338,7 +383,7 @@ function cleanParams(p: any): Partial<AtlasBuildInput> {
   if (!p || typeof p !== "object") return o;
   if (p.program === "kkb" || p.program === "dkb") o.program = p.program;
   if (typeof p.region === "string" && p.region.trim()) o.region = p.region.trim();
-  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget", "matchMin", "weightMatch", "weightIntent", "weightConfidence", "appliedCooldownDays"] as const) {
+  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget", "matchMin", "weightMatch", "weightIntent", "weightConfidence", "appliedCooldownDays", "coveragePct"] as const) {
     if (p[k] != null && !isNaN(Number(p[k]))) (o as any)[k] = Number(p[k]);
   }
   if (p.urgencyMin != null && !isNaN(Number(p.urgencyMin))) o.urgencyMin = Number(p.urgencyMin);

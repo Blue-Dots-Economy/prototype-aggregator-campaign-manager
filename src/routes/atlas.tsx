@@ -72,7 +72,7 @@ function AtlasPage() {
   const [cooldownDays, setCooldownDays] = useState(30);
   const [maxCampaigns, setMaxCampaigns] = useState(3);
   const [explorePct, setExplorePct] = useState(15);
-  const [urgencyWeight, setUrgencyWeight] = useState(30);
+  const [coveragePct, setCoveragePct] = useState(40);
   const [urgencyMin, setUrgencyMin] = useState("");
   const [matchMin, setMatchMin] = useState("");
   const [weightMatch, setWeightMatch] = useState(0.5);
@@ -109,7 +109,7 @@ function AtlasPage() {
         lastCohort,
         advanced: {
           program, region: region || null, budget: Math.min(budget, 1000), confidenceMin, cooldownDays,
-          maxCampaigns, explorePct, urgencyWeight, urgencyMin: urgencyMin === "" ? null : Number(urgencyMin),
+          maxCampaigns, explorePct, coveragePct, urgencyMin: urgencyMin === "" ? null : Number(urgencyMin),
           matchMin: matchMin === "" ? null : Number(matchMin),
           weightMatch, weightIntent, weightConfidence, appliedCooldownDays,
         },
@@ -272,9 +272,11 @@ function AtlasPage() {
                     </Field>
                   </AdvGroup>
                   <AdvGroup title="How to prioritise">
-                    <NumIn label="Urgency weight" value={urgencyWeight} onChange={setUrgencyWeight} min={0} max={60}
-                      hint="How much job urgency lifts a seeker's ranking (0 = ignore). Changes the order, not who's included." />
                     <NumIn label="Exploration %" value={explorePct} onChange={setExplorePct} min={0} max={50} />
+                  </AdvGroup>
+                  <AdvGroup title="Coverage">
+                    <NumIn label="Coverage %" value={coveragePct} onChange={(v) => setCoveragePct(Math.max(0, Math.min(80, v)))} min={0} max={80}
+                      hint="Share of the cohort reserved for under-served seekers (uncalled / unanswered / engaged-not-applied), split evenly. The rest is filled by top score." />
                   </AdvGroup>
                   <AdvGroup title="Scoring">
                     <NumIn label="Match weight" value={weightMatch} onChange={setWeightMatch} min={0} step={0.1} hint="Weighted average; match is the tie-breaker by default." />

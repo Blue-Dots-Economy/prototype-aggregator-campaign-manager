@@ -1,0 +1,1 @@
+ALTER TABLE public.atlas_cohort_members ADD COLUMN IF NOT EXISTS segment text;
