@@ -68,13 +68,12 @@ function AtlasPage() {
   const [program, setProgram] = useState<"kkb" | "dkb">("kkb");
   const [region, setRegion] = useState("");
   const [budget, setBudget] = useState(1000);
-  const [confidenceMin, setConfidenceMin] = useState(6);
+  const [confidenceMin, setConfidenceMin] = useState(4);
   const [cooldownDays, setCooldownDays] = useState(30);
   const [maxCampaigns, setMaxCampaigns] = useState(3);
-  const [explorePct, setExplorePct] = useState(15);
   const [coveragePct, setCoveragePct] = useState(40);
   const [urgencyMin, setUrgencyMin] = useState("");
-  const [matchMin, setMatchMin] = useState("");
+  const [matchMin, setMatchMin] = useState("3");
   const [weightMatch, setWeightMatch] = useState(0.5);
   const [weightIntent, setWeightIntent] = useState(0.3);
   const [weightConfidence, setWeightConfidence] = useState(0.2);
@@ -109,7 +108,7 @@ function AtlasPage() {
         lastCohort,
         advanced: {
           program, region: region || null, budget: Math.min(budget, 1000), confidenceMin, cooldownDays,
-          maxCampaigns, explorePct, coveragePct, urgencyMin: urgencyMin === "" ? null : Number(urgencyMin),
+          maxCampaigns, coveragePct, urgencyMin: urgencyMin === "" ? null : Number(urgencyMin),
           matchMin: matchMin === "" ? null : Number(matchMin),
           weightMatch, weightIntent, weightConfidence, appliedCooldownDays,
         },
@@ -270,9 +269,6 @@ function AtlasPage() {
                     <Field label="Min match (0–10)" hint="Only seekers whose match to the urgent job is at least this (KKB job-first only). Leave blank to include everyone.">
                       <TextIn type="number" value={matchMin} onChange={setMatchMin} placeholder="No filter" />
                     </Field>
-                  </AdvGroup>
-                  <AdvGroup title="How to prioritise">
-                    <NumIn label="Exploration %" value={explorePct} onChange={setExplorePct} min={0} max={50} />
                   </AdvGroup>
                   <AdvGroup title="Coverage">
                     <NumIn label="Coverage %" value={coveragePct} onChange={(v) => setCoveragePct(Math.max(0, Math.min(80, v)))} min={0} max={80}
