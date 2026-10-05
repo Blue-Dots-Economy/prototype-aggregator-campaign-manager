@@ -75,6 +75,10 @@ function AtlasPage() {
   const [urgencyWeight, setUrgencyWeight] = useState(30);
   const [urgencyMin, setUrgencyMin] = useState("");
   const [matchMin, setMatchMin] = useState("");
+  const [weightMatch, setWeightMatch] = useState(0.5);
+  const [weightIntent, setWeightIntent] = useState(0.3);
+  const [weightConfidence, setWeightConfidence] = useState(0.2);
+  const [appliedCooldownDays, setAppliedCooldownDays] = useState(30);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -107,6 +111,7 @@ function AtlasPage() {
           program, region: region || null, budget: Math.min(budget, 1000), confidenceMin, cooldownDays,
           maxCampaigns, explorePct, urgencyWeight, urgencyMin: urgencyMin === "" ? null : Number(urgencyMin),
           matchMin: matchMin === "" ? null : Number(matchMin),
+          weightMatch, weightIntent, weightConfidence, appliedCooldownDays,
         },
       } }) as Promise<any>;
     },
@@ -270,6 +275,12 @@ function AtlasPage() {
                     <NumIn label="Urgency weight" value={urgencyWeight} onChange={setUrgencyWeight} min={0} max={60}
                       hint="How much job urgency lifts a seeker's ranking (0 = ignore). Changes the order, not who's included." />
                     <NumIn label="Exploration %" value={explorePct} onChange={setExplorePct} min={0} max={50} />
+                  </AdvGroup>
+                  <AdvGroup title="Scoring">
+                    <NumIn label="Match weight" value={weightMatch} onChange={setWeightMatch} min={0} step={0.1} hint="Weighted average; match is the tie-breaker by default." />
+                    <NumIn label="Intent weight" value={weightIntent} onChange={setWeightIntent} min={0} step={0.1} hint="Weighted average; match is the tie-breaker by default." />
+                    <NumIn label="Confidence weight" value={weightConfidence} onChange={setWeightConfidence} min={0} step={0.1} hint="Weighted average; match is the tie-breaker by default." />
+                    <NumIn label="Applied cooldown (days)" value={appliedCooldownDays} onChange={setAppliedCooldownDays} min={0} hint="Don't re-call someone who applied within this many days (0 = no cooldown)." />
                   </AdvGroup>
                   <AdvGroup title="Size">
                     <NumIn label="Budget (max 1000)" value={budget} onChange={(v) => setBudget(Math.min(v, 1000))} min={1} max={1000} />

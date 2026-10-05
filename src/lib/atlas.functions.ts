@@ -70,6 +70,10 @@ export interface AtlasBuildInput {
   urgencyWeight?: number | null;
   urgencyMin?: number | null;
   matchMin?: number | null; // 0–10, job-first (KKB) only
+  weightMatch?: number | null;      // weighted-average ranking (default 0.5 — the tie-breaker)
+  weightIntent?: number | null;     // default 0.3
+  weightConfidence?: number | null; // default 0.2
+  appliedCooldownDays?: number | null; // default 30; 0 = no cooldown
 }
 
 interface SampleRow {
@@ -78,6 +82,7 @@ interface SampleRow {
   avg_intent: number | null; max_intent: number | null; avg_match: number | null;
   urgency?: number | null; urgency_reason?: string | null;
   match_score?: number | null; match_reason?: string | null; job_item_id?: string | null;
+  ever_applied?: boolean | null; ever_called?: boolean | null; ever_answered?: boolean | null; ever_engaged?: boolean | null; total_application?: number | null;
 }
 
 const num = (v: unknown) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
@@ -144,9 +149,27 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
     const sample = Array.isArray(p.sample) ? p.sample : [];
     // Optional min-urgency filter. With no urgency data this drops nothing unless a
     // threshold was explicitly set — in which case an empty-ish cohort is correct.
-    const usable = urgencyMin == null
+    const urgOk = urgencyMin == null
       ? sample
       : sample.filter((r) => { const u = num(r.urgency); return u != null && u >= urgencyMin; });
+    // Applied cooldown: skip people who applied AND were contacted within the window.
+    // Never permanent — no/invalid date or older than the window keeps them in.
+    // proxy: last_call_date until a per-seeker last_application_date exists
+    const wNum = (v: unknown, d: number) => { const n = Number(v); return v == null || (v as any) === "" || isNaN(n) ? d : Math.max(0, n); };
+    const appliedCooldownDays = wNum(data.appliedCooldownDays, 30);
+    let appliedCooldownExcluded = 0;
+    const usable = appliedCooldownDays <= 0 ? urgOk : urgOk.filter((r) => {
+      if (r.ever_applied !== true) return true;
+      const ds = daysSince(r.last_call_date);
+      if (ds == null || ds > appliedCooldownDays) return true;
+      appliedCooldownExcluded++;
+      return false;
+    });
+    const weightMatch = wNum(data.weightMatch, 0.5);
+    const weightIntent = wNum(data.weightIntent, 0.3);
+    const weightConfidence = wNum(data.weightConfidence, 0.2);
+    const wsum = weightMatch + weightIntent + weightConfidence || 1;
+    const clamp01 = (v: number | null) => (v == null ? 0 : Math.max(0, Math.min(1, v / 10)));
 
     // Score: confidence + intent/match up; campaigns run + very recent contact down.
     // Urgency is an optional additive boost on top — it never dominates.
@@ -161,17 +184,12 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const mScore = num(r.match_score);
       const mReason = r.match_reason ?? null;
       const jobId = r.job_item_id ?? null;
-      let s = 0;
-      s += (conf ?? 5) / 10 * 40;
-      s += (intent != null ? Math.min(intent, 10) / 10 : 0.4) * 30;
-      s += (match != null ? Math.min(match, 10) / 10 : 0.4) * 20;
-      s -= Math.min(camps, 10) * 4;
-      if (ds != null && ds < 14) s -= (14 - ds) * 1.5;
-      if (urg != null) {
-        const urgNorm = (Math.max(-2, Math.min(5, urg)) + 2) / 7;
-        s += urgNorm * urgencyWeight;
-      }
-      if (mScore != null) s += (Math.min(10, Math.max(0, mScore)) / 10) * 15; // match-quality nudge
+      // Weighted average of normalized match / intent / confidence (0–100).
+      // Missing components count as 0 but still divide by the full weight sum.
+      // Urgency is the job-first SELECTOR, not part of this blend.
+      const mv = mScore ?? match;
+      const s = mv == null && intent == null && conf == null ? 0
+        : 100 * (weightMatch * clamp01(mv) + weightIntent * clamp01(intent) + weightConfidence * clamp01(conf)) / wsum;
       return { r, conf, intent, match, camps, ds, urg, urgReason, mScore, mReason, jobId, score: s };
     });
 
@@ -181,7 +199,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
 
     const members = scored.map((x) => {
       const isExp = exploreSet.has(x);
-      const score = Math.round((x.score + (isExp ? 10 : 0)) * 10) / 10;
+      const score = Math.round(x.score + (isExp ? 10 : 0));
       const isUrgent = x.urg != null && x.urg >= 3;
       let reason: string;
       if (isExp) reason = x.camps === 0 ? "Never reached by a campaign — exploration" : x.ds != null && x.ds > 30 ? "Not called in a while — exploration" : "Lightly contacted so far — exploration";
@@ -232,11 +250,13 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       : urgencyPresent
         ? `${urgentCount} of these match urgent, unfilled jobs. `
         : "Urgency data isn't available yet, so I've ranked on confidence, intent and history. ";
-    const narration = totalCount === 0
+    const cooldownSentence = appliedCooldownExcluded > 0 ? ` I skipped ${appliedCooldownExcluded} who applied within the last ${appliedCooldownDays} days — they'll come back into the pool after that.` : "";
+    const narrationBase = totalCount === 0
       ? `I looked for people in ${regionLabel} who meet these filters and found no one. I'd suggest loosening the confidence threshold or cooldown before trying again.`
       : mode === "jobfirst"
       ? `I started from the most urgent, unfilled jobs${stages?.urgentJobs != null ? ` — ${stages.urgentJobs} of them` : ""} — and pulled the seekers who best match them${stages?.matchedSeekers != null ? ` (${stages.matchedSeekers} matched)` : ""}. ${totalCount} people today in ${regionLabel}${capNote}. I've kept about ${expShare} lightly-contacted people in the mix so they aren't overlooked. ${fairnessSentence}. ${urgencySentence}This is my recommendation — you approve before anything runs.`
       : `Here's my plan for ${regionLabel}: ${totalCount} people today${capNote}. Most are strong matches, but I've deliberately included about ${expShare} we haven't reached much — they deserve a shot even if I'm less certain about them. ${fairnessSentence}. ${p.confidenceAvailable ? "" : "Confidence scores are missing for this pool, so my ranking leans on intent and history. "}${urgencySentence}This is my recommendation — you approve before anything runs.`;
+    const narration = narrationBase + cooldownSentence;
 
     const db = stateDb();
     const { data: row, error: insErr } = await db.from("atlas_cohorts").insert({
@@ -244,7 +264,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       confidence_min: data.confidenceMin ?? null, cooldown_days: data.cooldownDays ?? null,
       max_campaigns: data.maxCampaigns ?? null, explore_pct: explorePct,
       status: "proposed", model_mark: "Mark I", total_count: totalCount,
-      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin, matchMin, mode, stages }, created_by: actor,
+      narration, fairness, params: { ...data, budget, explorePct, matched, urgencyWeight, urgencyMin, matchMin, mode, stages, weightMatch, weightIntent, weightConfidence, appliedCooldownDays, appliedCooldownExcluded }, created_by: actor,
     }).select("id").single();
     if (insErr) throw new Error(insErr.message);
     const cohortId = (row as any).id as string;
@@ -252,7 +272,7 @@ async function buildCohortCore(actor: string, data: AtlasBuildInput) {
       const { error: mErr } = await db.from("atlas_cohort_members").insert(members.map((m) => ({ ...m, cohort_id: cohortId })));
       if (mErr) throw new Error(mErr.message);
     }
-    return { cohortId, totalCount, sampleCount: members.length, exploreCount, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched };
+    return { cohortId, totalCount, sampleCount: members.length, exploreCount, fairness, narration, members, confidenceAvailable: !!p.confidenceAvailable, urgencyAvailable: urgencyPresent, urgentCount, regions: Array.isArray(p.regions) ? p.regions : [], status: "proposed", mode, stages, budget, matched, appliedCooldownExcluded };
   }
 }
 
@@ -318,7 +338,7 @@ function cleanParams(p: any): Partial<AtlasBuildInput> {
   if (!p || typeof p !== "object") return o;
   if (p.program === "kkb" || p.program === "dkb") o.program = p.program;
   if (typeof p.region === "string" && p.region.trim()) o.region = p.region.trim();
-  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget", "matchMin"] as const) {
+  for (const k of ["confidenceMin", "cooldownDays", "maxCampaigns", "explorePct", "urgencyWeight", "budget", "matchMin", "weightMatch", "weightIntent", "weightConfidence", "appliedCooldownDays"] as const) {
     if (p[k] != null && !isNaN(Number(p[k]))) (o as any)[k] = Number(p[k]);
   }
   if (p.urgencyMin != null && !isNaN(Number(p.urgencyMin))) o.urgencyMin = Number(p.urgencyMin);
