@@ -74,6 +74,7 @@ function AtlasPage() {
   const [explorePct, setExplorePct] = useState(15);
   const [urgencyWeight, setUrgencyWeight] = useState(30);
   const [urgencyMin, setUrgencyMin] = useState("");
+  const [matchMin, setMatchMin] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -105,6 +106,7 @@ function AtlasPage() {
         advanced: {
           program, region: region || null, budget: Math.min(budget, 1000), confidenceMin, cooldownDays,
           maxCampaigns, explorePct, urgencyWeight, urgencyMin: urgencyMin === "" ? null : Number(urgencyMin),
+          matchMin: matchMin === "" ? null : Number(matchMin),
         },
       } }) as Promise<any>;
     },
@@ -259,6 +261,9 @@ function AtlasPage() {
                     <NumIn label="Max campaigns run" value={maxCampaigns} onChange={setMaxCampaigns} min={0} />
                     <Field label="Min urgency" hint="Only include seekers matched to a job at or above this urgency (scale −2 to 5). Leave blank to include everyone. Changes who's included.">
                       <TextIn type="number" value={urgencyMin} onChange={setUrgencyMin} placeholder="No filter" />
+                    </Field>
+                    <Field label="Min match (0–10)" hint="Only seekers whose match to the urgent job is at least this (KKB job-first only). Leave blank to include everyone.">
+                      <TextIn type="number" value={matchMin} onChange={setMatchMin} placeholder="No filter" />
                     </Field>
                   </AdvGroup>
                   <AdvGroup title="How to prioritise">
