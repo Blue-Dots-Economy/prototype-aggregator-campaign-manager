@@ -8,6 +8,7 @@ export type ConsoleCohort = {
   cohortId: string; totalCount: number; sampleCount: number; exploreCount: number; urgentCount: number;
   narration: string; members: any[]; urgencyAvailable: boolean; confidenceAvailable?: boolean; status?: string;
   mode?: string; stages?: { urgentJobs: number | null; matchedSeekers: number | null; selected: number | null } | null;
+  expectedApplications?: number; jobsCovered?: number; expectedByJob?: Array<{ job_item_id: string; expected: number }>;
   fairness: { byRegion: Record<string, number>; byCategory: Record<string, number>; categoryAvailable: boolean; note: string | null };
 };
 
@@ -90,7 +91,11 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
     ["8–10", matchVals.filter((v) => v >= 8).length],
     ["No score", c.members.length - matchVals.length],
   ];
-  const explore: Array<[string, number]> = [["Core", Math.max(0, c.sampleCount - c.exploreCount)], ["Exploration", c.exploreCount]];
+  const segN = (g: string) => c.members.filter((x) => (x.segment ?? "warm") === g).length;
+  const coverage: Array<[string, number]> = [
+    ["Uncalled", segN("uncalled")], ["Unanswered", segN("unanswered")],
+    ["Engaged, not applied", segN("engaged_not_applied")], ["Warm", segN("warm")],
+  ];
 
   const R = 70, C = 2 * Math.PI * R, frac = Math.min(1, c.totalCount / cap);
   const muted = { color: "var(--n-muted)" };
@@ -119,6 +124,14 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
 
         {/* Selection reduction */}
         <div className="space-y-2">
+          {c.expectedApplications != null && (
+            <div className="mb-3 rounded-xl border p-3" style={{ borderColor: "var(--n-border)" }}>
+              <div className="text-sm" style={muted}>Expected applications</div>
+              <div className="text-3xl font-semibold tabular-nums">~{c.expectedApplications}</div>
+              <div className="text-xs" style={muted}>estimate · intent · confidence · match × base rate</div>
+              {c.jobsCovered != null && <div className="text-xs" style={muted}>across {c.jobsCovered} jobs</div>}
+            </div>
+          )}
           <h4 className="text-sm font-medium" style={muted}>How it was picked</h4>
           {(c.stages ? [
             { label: "Urgent open jobs", value: c.stages.urgentJobs, hint: "unfilled, by urgency" },
@@ -150,7 +163,7 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
         <Dial title="Region" data={topN(c.fairness.byRegion)} mounted={mounted} />
         <Dial title="Confidence" data={conf} mounted={mounted} dimNote={c.confidenceAvailable === false || confVals.length === 0 ? "confidence sparse" : undefined} />
-        <Dial title="Exploration vs core" data={explore} mounted={mounted} />
+        <Dial title="Coverage" data={coverage} mounted={mounted} colors={["#67e8f9", "#818cf8", "#fbbf24", "#94a3b8"]} />
         <Dial title="Urgency" data={urg} mounted={mounted} dimNote={!c.urgencyAvailable || urgVals.length === 0 ? "awaiting urgency data" : undefined} />
         <Dial title="Match" data={matchB} mounted={mounted} dimNote={matchVals.length === 0 ? "no match scores in sample" : undefined} />
         <Dial title="Fairness · category" data={topN(c.fairness.byCategory)} mounted={mounted} dimNote={c.fairness.categoryAvailable ? undefined : "SC/ST data pending"} />
@@ -206,7 +219,8 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
                     </td>
                     <td className="px-3 py-2 font-semibold">{m.priority_score}</td>
                     <td className="px-3 py-2">
-                      {m.is_exploration && <span className="mr-2 rounded-full border px-2 py-0.5 text-xs" style={{ borderColor: "var(--n-border)" }}>exploration</span>}
+                      {m.segment && m.segment !== "warm" ? <span className="mr-2 rounded-full border px-2 py-0.5 text-xs" style={{ borderColor: "var(--n-border)" }}>{String(m.segment).replace(/_/g, " ")}</span>
+                        : m.is_exploration && !m.segment ? <span className="mr-2 rounded-full border px-2 py-0.5 text-xs" style={{ borderColor: "var(--n-border)" }}>exploration</span> : null}
                       <span style={muted}>{m.reason}</span>
                     </td>
                   </tr>
@@ -234,7 +248,7 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
   );
 }
 
-function Dial({ title, data, mounted, dimNote }: { title: string; data: Array<[string, number]>; mounted: boolean; dimNote?: string }) {
+function Dial({ title, data, mounted, dimNote, colors = PALETTE }: { title: string; data: Array<[string, number]>; mounted: boolean; dimNote?: string; colors?: string[] }) {
   const total = data.reduce((s, [, v]) => s + v, 0);
   const dim = !!dimNote || total === 0;
   const R = 26, C = 2 * Math.PI * R;
@@ -246,7 +260,7 @@ function Dial({ title, data, mounted, dimNote }: { title: string; data: Array<[s
         {!dim && data.map(([k, v], i) => {
           const len = (v / total) * C;
           const el = (
-            <circle key={k} cx="32" cy="32" r={R} fill="none" stroke={PALETTE[i % PALETTE.length]} strokeWidth="7" className="cc-arc"
+            <circle key={k} cx="32" cy="32" r={R} fill="none" stroke={colors[i % colors.length]} strokeWidth="7" className="cc-arc"
               strokeDasharray={`${mounted ? Math.max(0, len - 1.5) : 0} ${C}`} strokeDashoffset={-acc} />
           );
           acc += len;
@@ -261,7 +275,7 @@ function Dial({ title, data, mounted, dimNote }: { title: string; data: Array<[s
           <ul className="mt-1 space-y-0.5 text-xs">
             {data.map(([k, v], i) => (
               <li key={k} className="flex items-center gap-1.5">
-                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: colors[i % colors.length] }} />
                 <span className="truncate" style={{ color: "var(--n-muted)" }}>{k}</span>
                 <span className="ml-auto font-medium tabular-nums">{v}</span>
               </li>
