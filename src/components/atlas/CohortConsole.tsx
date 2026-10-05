@@ -74,18 +74,21 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
     ["4–6", confVals.filter((v) => v >= 4 && v < 6).length],
     ["6–8", confVals.filter((v) => v >= 6 && v < 8).length],
     ["8–10", confVals.filter((v) => v >= 8).length],
+    ["No score", c.members.length - confVals.length],
   ];
   const urgVals = c.members.map((x) => (x.urgency == null ? null : Number(x.urgency))).filter((x): x is number => x != null);
   const urg: Array<[string, number]> = [
     ["−2…0", urgVals.filter((v) => v <= 0).length],
     ["1–2", urgVals.filter((v) => v > 0 && v < 3).length],
     ["3–5", urgVals.filter((v) => v >= 3).length],
+    ["No data", c.members.length - urgVals.length],
   ];
   const matchVals = c.members.map((x) => (x.match_score == null ? null : Number(x.match_score))).filter((x): x is number => x != null);
   const matchB: Array<[string, number]> = [
     ["<5", matchVals.filter((v) => v < 5).length],
     ["5–7", matchVals.filter((v) => v >= 5 && v < 8).length],
     ["8–10", matchVals.filter((v) => v >= 8).length],
+    ["No score", c.members.length - matchVals.length],
   ];
   const explore: Array<[string, number]> = [["Core", Math.max(0, c.sampleCount - c.exploreCount)], ["Exploration", c.exploreCount]];
 
@@ -154,26 +157,27 @@ export function CohortConsole({ c, budget, regionLabel, killed, busy, onApprove,
       </div>
 
       <p className="text-xs" style={muted}>
-        Distributions come from a representative sample of {c.sampleCount} out of {c.totalCount}; the headline count is the true total.
+        Breakdowns cover the full proposed cohort of {c.totalCount}.
+        {matched != null && matched > c.totalCount && ` ${matched} seekers qualified; capped to the daily budget.`}
       </p>
 
       <div>
         <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
           className="flex items-center gap-1.5 rounded text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-300" style={{ color: "var(--n-accent)" }}>
           <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-          {open ? "Hide" : "Show"} who's in it ({c.members.length} previewed)
+          {open ? "Hide" : "Show"} who's in it ({c.totalCount})
         </button>
         {open && (
-          <div className="mt-3 overflow-x-auto rounded-lg border" style={{ borderColor: "var(--n-border)" }}>
+          <div className="mt-3 max-h-[60vh] overflow-auto rounded-lg border" style={{ borderColor: "var(--n-border)" }}>
             <table className="w-full text-sm">
               <caption className="caption-bottom p-2 text-xs" style={muted}>
-                Representative preview of {c.totalCount} — full list is resolved only at dispatch (disabled in this version).
+                {c.members.length > 100 ? `Showing top 100 of ${c.totalCount} by priority.` : `All ${c.totalCount} by priority.`} Phones stay masked; dispatch is disabled in this version.
               </caption>
               <thead className="text-xs" style={{ ...muted, background: "rgba(255,255,255,.03)" }}>
                 <tr>{["Phone", "Region", "Category", "Conf.", "Campaigns", "Last call", "Urgency", "Match", "Priority", "Why"].map((h) => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr>
               </thead>
               <tbody>
-                {c.members.map((m, i) => (
+                {c.members.slice(0, 100).map((m, i) => (
                   <tr key={i} className="border-t align-top" style={{ borderColor: "var(--n-border)" }}>
                     <td className="px-3 py-2 font-mono text-xs">{m.phone_masked}</td>
                     <td className="px-3 py-2">{m.region || "—"}</td>
