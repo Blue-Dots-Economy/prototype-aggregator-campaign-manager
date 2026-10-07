@@ -240,11 +240,36 @@ export function useReviewCallsByIds(dataset: ReviewDataset, ids: string[], opts?
   });
 }
 
+const REVIEW_PAGE = 1000;
+const REVIEW_PAGE_CONCURRENCY = 6;
+
 export function useReviewCalls(dataset: ReviewDataset, opts?: { enabled?: boolean }) {
   const fn = useServerFn(fetchReviewCalls);
   return useQuery<Array<Record<string, string>>>({
     queryKey: ["review-calls", dataset],
-    queryFn: () => fn({ data: { dataset } }),
+    queryFn: async () => {
+      // The full list is larger than one server-function response can carry, so
+      // pull it in slices and stitch them back into the server's order.
+      const first = await fn({ data: { dataset, offset: 0, limit: REVIEW_PAGE } });
+      // The database may hand back fewer rows than asked; step by what actually
+      // arrived so no slice of calls is ever skipped.
+      const step = first.rows.length || REVIEW_PAGE;
+      const slots: Array<Array<Record<string, string>>> = [first.rows];
+      const offsets: number[] = [];
+      for (let o = step; o < first.total; o += step) offsets.push(o);
+      let next = 0;
+      const worker = async () => {
+        while (next < offsets.length) {
+          const i = next++;
+          const page = await fn({ data: { dataset, offset: offsets[i], limit: REVIEW_PAGE } });
+          slots[i + 1] = page.rows;
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(REVIEW_PAGE_CONCURRENCY, offsets.length) }, worker),
+      );
+      return slots.flat();
+    },
     enabled: opts?.enabled ?? true,
     staleTime: 60_000,
     gcTime: 5 * 60_000,

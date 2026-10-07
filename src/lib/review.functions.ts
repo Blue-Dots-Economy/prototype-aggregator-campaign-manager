@@ -41,6 +41,22 @@ async function resolveSheet(
 }
 
 const REVIEW_COLS = "call_id, campaign_day, campaign_date, campaign_type, language, city_campaign, call_outcome, call_duration_seconds, intent_score, drop_reason, job_status, phone, channel, data";
+/** List variant: REVIEW_COLS minus the fat `data` jsonb. Selecting `data` forces
+ *  Postgres to detoast every transcript just to build a list → the Review hub
+ *  times out against the pipeline matview (76k+ rows). Detail fetches keep `data`. */
+const REVIEW_LIST_COLS = "call_id, campaign_day, campaign_date, campaign_type, language, city_campaign, call_outcome, call_duration_seconds, intent_score, drop_reason, job_status, phone, channel";
+
+/** A server-function response is capped at 16 MB by the framework, and the whole
+ *  KKB list is ~24 MB even without `data` — so the list is returned one slice at
+ *  a time and stitched together client-side (see useReviewCalls). */
+const LIST_PAGE = 1000;
+const MAX_LIST_ROWS = 100000;
+
+export interface ReviewCallsPage {
+  rows: Array<Record<string, string>>;
+  total: number;
+  offset: number;
+}
 
 function mapReviewRow(r: Record<string, unknown>): Record<string, string> {
   const d = (r.data ?? {}) as Record<string, unknown>;
@@ -72,26 +88,24 @@ function mapReviewRow(r: Record<string, unknown>): Record<string, string> {
   };
 }
 
+/** One slice of the Review hub list. `total` is the full row count for the
+ *  dataset, so the caller knows how many slices remain. */
 export const fetchReviewCalls = createServerFn({ method: "GET" })
-  .inputValidator((data: { dataset: ReviewDataset }) => data)
-  .handler(async ({ data }): Promise<Array<Record<string, string>>> => {
+  .inputValidator((data: { dataset: ReviewDataset; offset?: number; limit?: number }) => data)
+  .handler(async ({ data }): Promise<ReviewCallsPage> => {
     const client = await sb(data.dataset);
-    const rows: Record<string, unknown>[] = [];
-    let _from = 0;
-    while (true) {
-      const { data: batch, error } = await client
-        .from("call_rows")
-        .select(REVIEW_COLS)
-        .eq("program", data.dataset)
-        .order("call_id", { ascending: true })
-        .range(_from, _from + 999);
-      if (error) throw new Error(error.message);
-      const b = (batch ?? []) as unknown as Record<string, unknown>[];
-      rows.push(...b);
-      if (b.length === 0 || rows.length >= 100000) break;
-      _from += b.length;
-    }
-    return rows.map(mapReviewRow);
+    const offset = Math.max(0, Math.floor(data.offset ?? 0));
+    const limit = Math.min(Math.max(1, Math.floor(data.limit ?? LIST_PAGE)), MAX_LIST_ROWS);
+    const { data: batch, error, count } = await client
+      .from("call_rows")
+      .select(REVIEW_LIST_COLS, { count: "exact" })
+      .eq("program", data.dataset)
+      // id is unique so offset slices are stable; call_id is not.
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw new Error(error.message);
+    const rows = ((batch ?? []) as unknown as Array<Record<string, unknown>>).map(mapReviewRow);
+    return { rows, total: count ?? offset + rows.length, offset };
   });
 
 /** Targeted fetch for a cohort: chunks of 150 ids, at most 5 chunks in flight. */
@@ -110,7 +124,7 @@ export const fetchReviewCallsByIds = createServerFn({ method: "GET" })
         const chunk = chunks[next++];
         const { data: batch, error } = await client
           .from("call_rows")
-          .select(REVIEW_COLS)
+          .select(REVIEW_LIST_COLS)
           .eq("program", data.dataset)
           .in("call_id", chunk);
         if (error) throw new Error(error.message);
