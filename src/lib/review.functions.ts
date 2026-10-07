@@ -41,6 +41,10 @@ async function resolveSheet(
 }
 
 const REVIEW_COLS = "call_id, campaign_day, campaign_date, campaign_type, language, city_campaign, call_outcome, call_duration_seconds, intent_score, drop_reason, job_status, phone, channel, data";
+/** List variant: REVIEW_COLS minus the fat `data` jsonb. Selecting `data` forces
+ *  Postgres to detoast every transcript just to build a list → the Review hub
+ *  times out against the pipeline matview (76k+ rows). Detail fetches keep `data`. */
+const REVIEW_LIST_COLS = "call_id, campaign_day, campaign_date, campaign_type, language, city_campaign, call_outcome, call_duration_seconds, intent_score, drop_reason, job_status, phone, channel";
 
 function mapReviewRow(r: Record<string, unknown>): Record<string, string> {
   const d = (r.data ?? {}) as Record<string, unknown>;
@@ -81,7 +85,7 @@ export const fetchReviewCalls = createServerFn({ method: "GET" })
     while (true) {
       const { data: batch, error } = await client
         .from("call_rows")
-        .select(REVIEW_COLS)
+        .select(REVIEW_LIST_COLS)
         .eq("program", data.dataset)
         .order("call_id", { ascending: true })
         .range(_from, _from + 999);
@@ -110,7 +114,7 @@ export const fetchReviewCallsByIds = createServerFn({ method: "GET" })
         const chunk = chunks[next++];
         const { data: batch, error } = await client
           .from("call_rows")
-          .select(REVIEW_COLS)
+          .select(REVIEW_LIST_COLS)
           .eq("program", data.dataset)
           .in("call_id", chunk);
         if (error) throw new Error(error.message);
