@@ -46,6 +46,10 @@ const REVIEW_COLS = "call_id, campaign_day, campaign_date, campaign_type, langua
  *  times out against the pipeline matview (76k+ rows). Detail fetches keep `data`. */
 const REVIEW_LIST_COLS = "call_id, campaign_day, campaign_date, campaign_type, language, city_campaign, call_outcome, call_duration_seconds, intent_score, drop_reason, job_status, phone, channel";
 
+const LIST_PAGE = 1000;
+const LIST_CONCURRENCY = 8;
+const MAX_LIST_ROWS = 100000;
+
 function mapReviewRow(r: Record<string, unknown>): Record<string, string> {
   const d = (r.data ?? {}) as Record<string, unknown>;
   const raw = (d.raw ?? {}) as Record<string, unknown>;
