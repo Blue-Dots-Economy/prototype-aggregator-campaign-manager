@@ -49,7 +49,7 @@ const REVIEW_LIST_COLS = "call_id, campaign_day, campaign_date, campaign_type, l
 /** A server-function response is capped at 16 MB by the framework, and the whole
  *  KKB list is ~24 MB even without `data` — so the list is returned one slice at
  *  a time and stitched together client-side (see useReviewCalls). */
-const LIST_PAGE = 2000;
+const LIST_PAGE = 1000;
 const MAX_LIST_ROWS = 100000;
 
 export interface ReviewCallsPage {

@@ -240,7 +240,7 @@ export function useReviewCallsByIds(dataset: ReviewDataset, ids: string[], opts?
   });
 }
 
-const REVIEW_PAGE = 2000;
+const REVIEW_PAGE = 1000;
 const REVIEW_PAGE_CONCURRENCY = 6;
 
 export function useReviewCalls(dataset: ReviewDataset, opts?: { enabled?: boolean }) {
@@ -251,9 +251,12 @@ export function useReviewCalls(dataset: ReviewDataset, opts?: { enabled?: boolea
       // The full list is larger than one server-function response can carry, so
       // pull it in slices and stitch them back into the server's order.
       const first = await fn({ data: { dataset, offset: 0, limit: REVIEW_PAGE } });
+      // The database may hand back fewer rows than asked; step by what actually
+      // arrived so no slice of calls is ever skipped.
+      const step = first.rows.length || REVIEW_PAGE;
       const slots: Array<Array<Record<string, string>>> = [first.rows];
       const offsets: number[] = [];
-      for (let o = REVIEW_PAGE; o < first.total; o += REVIEW_PAGE) offsets.push(o);
+      for (let o = step; o < first.total; o += step) offsets.push(o);
       let next = 0;
       const worker = async () => {
         while (next < offsets.length) {
