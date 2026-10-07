@@ -84,21 +84,49 @@ export const fetchReviewCalls = createServerFn({ method: "GET" })
   .inputValidator((data: { dataset: ReviewDataset }) => data)
   .handler(async ({ data }): Promise<Array<Record<string, string>>> => {
     const client = await sb(data.dataset);
+    // Exact count up front (cheap head request) so every page can be pulled
+    // concurrently. Walking 76k+ rows 1000 at a time serially takes ~70s and
+    // blows the request timeout → the Review hub never loads.
+    const { count } = await client
+      .from("call_rows")
+      .select("id", { count: "exact", head: true })
+      .eq("program", data.dataset);
     const rows: Record<string, unknown>[] = [];
-    let _from = 0;
-    while (true) {
-      const { data: batch, error } = await client
-        .from("call_rows")
-        .select(REVIEW_LIST_COLS)
-        .eq("program", data.dataset)
-        .order("call_id", { ascending: true })
-        .range(_from, _from + 999);
-      if (error) throw new Error(error.message);
-      const b = (batch ?? []) as unknown as Record<string, unknown>[];
-      rows.push(...b);
-      if (b.length === 0 || rows.length >= 100000) break;
-      _from += b.length;
+    if (count == null) {
+      // Fail-safe: no count available → fall back to the serial walk (still slim).
+      let _from = 0;
+      while (true) {
+        const { data: batch, error } = await client
+          .from("call_rows")
+          .select(REVIEW_LIST_COLS)
+          .eq("program", data.dataset)
+          .order("id", { ascending: true })
+          .range(_from, _from + LIST_PAGE - 1);
+        if (error) throw new Error(error.message);
+        const b = (batch ?? []) as unknown as Record<string, unknown>[];
+        rows.push(...b);
+        if (b.length === 0 || rows.length >= MAX_LIST_ROWS) break;
+        _from += b.length;
+      }
+      return rows.map(mapReviewRow);
     }
+    const pages = Math.ceil(Math.min(count, MAX_LIST_ROWS) / LIST_PAGE);
+    let next = 0;
+    const worker = async () => {
+      while (next < pages) {
+        const i = next++;
+        const { data: batch, error } = await client
+          .from("call_rows")
+          .select(REVIEW_LIST_COLS)
+          .eq("program", data.dataset)
+          // id is unique so offset pages are stable; call_id is not.
+          .order("id", { ascending: true })
+          .range(i * LIST_PAGE, i * LIST_PAGE + LIST_PAGE - 1);
+        if (error) throw new Error(error.message);
+        rows.push(...((batch ?? []) as unknown as Record<string, unknown>[]));
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(LIST_CONCURRENCY, pages) }, worker));
     return rows.map(mapReviewRow);
   });
 
