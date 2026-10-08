@@ -77,6 +77,7 @@ import {
 import { useAuth } from "@/auth/context";
 import { DistrictBluedots } from "@/components/user/DistrictBluedots";
 import { AggregatorBluedots } from "@/components/user/AggregatorBluedots";
+import { CoordinatorBluedots } from "@/components/user/CoordinatorBluedots";
 
 export const Route = createFileRoute("/user-level-analysis")({
   component: UserLevelAnalysis,
@@ -128,6 +129,9 @@ function UserLevelAnalysis() {
   const { session } = useAuth();
   if (session?.role === "owner" && session.district) {
     return <AggregatorBluedots orgName={session.nodeName ?? "Your organisation"} district={session.district} />;
+  }
+  if (session?.role === "coordinator" && session.district) {
+    return <CoordinatorBluedots coordName={session.nodeName ?? "My list"} district={session.district} />;
   }
   if (session?.role === "jfc" && session.district) {
     return <DistrictBluedots district={session.district} />;
