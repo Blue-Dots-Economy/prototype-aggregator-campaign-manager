@@ -55,8 +55,9 @@ function genHierarchy(instance: string, realTotal: number): AggNode[] {
   const names = AGG_NAMES[instance] ?? AGG_NAMES.UP;
   const aggCount = Math.min(names.length, 5 + Math.floor(Math.random() * 2));
   let ci = 0;
-  return splitInto(realTotal, aggCount, 200).map((aggTotal, i) => {
-    const coordinators = splitInto(aggTotal, 2 + Math.floor(Math.random() * 5), 20).map((d) => makeCoord(instance, ci++, d));
+  return splitInto(realTotal, aggCount, Math.max(10, Math.floor(realTotal / (aggCount * 4)))).map((aggTotal, i) => {
+    const cCount = 2 + Math.floor(Math.random() * 5);
+    const coordinators = splitInto(aggTotal, cCount, Math.max(5, Math.floor(aggTotal / (cCount * 4)))).map((d) => makeCoord(instance, ci++, d));
     const sum = (k: keyof Node) => coordinators.reduce((a, c) => a + (c[k] as number), 0);
     const dots = sum("dots");
     const wavg = (k: keyof Node) => Math.round(coordinators.reduce((a, c) => a + (c[k] as number) * c.dots, 0) / (dots || 1));
