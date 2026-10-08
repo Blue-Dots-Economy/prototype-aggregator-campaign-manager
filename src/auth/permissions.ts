@@ -5,7 +5,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   admin: ["*"],
   jfc: ["/user-level-analysis", "/", "/campaigns", "/review", "/launch", "/ecosystem-view", "/campaign-requests", "/request-campaign", "/cm-test"],
   coordinator: ["/user-level-analysis", "/", "/campaigns", "/review", "/request-campaign"],
-  owner: ["/user-level-analysis", "/"],
+  owner: ["/user-level-analysis", "/", "/campaigns", "/review"],
   ecosystem: ["/ecosystem-view", "/user-level-analysis", "/"],
   user: ["/user-level-analysis", "/", "/campaigns", "/review"],
 };
