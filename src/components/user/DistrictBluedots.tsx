@@ -189,10 +189,10 @@ export function DistrictBluedots({ district }: { district: string }) {
       <div>
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">District totals</div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiTile label="Total Blue Dots" value={fmtN(realTotal)} description="Onboarded across the district (live)" Icon={Users} />
-          <KpiTile label="Aggregator Owners" value={fmtN(aggs.length)} description="Partner organisations" Icon={Building2} />
-          <KpiTile label="Coordinators" value={fmtN(totals.coords)} description="Across all aggregators" Icon={Layers} />
-          <KpiTile label="Applied (≥1)" value={`${pctOf(totals.applied, totals.dots)}%`} description={`${fmtN(totals.applied)} dots have applied`} Icon={Send} />
+          <KpiTile label="Total Blue Dots" value={fmtN(realTotal)} description="Onboarded across the district (live)" Icon={Users} cardClass="bg-gradient-to-br from-muted/50 to-card dark:from-muted/20 dark:to-card" />
+          <KpiTile label="Aggregator Owners" value={fmtN(aggs.length)} description="Partner organisations" Icon={Building2} cardClass="bg-gradient-to-br from-muted/50 to-card dark:from-muted/20 dark:to-card" />
+          <KpiTile label="Coordinators" value={fmtN(totals.coords)} description="Across all aggregators" Icon={Layers} cardClass="bg-gradient-to-br from-muted/50 to-card dark:from-muted/20 dark:to-card" />
+          <KpiTile label="Applied (≥1)" value={`${pctOf(totals.applied, totals.dots)}%`} description={`${fmtN(totals.applied)} dots have applied`} Icon={Send} cardClass="bg-gradient-to-br from-muted/50 to-card dark:from-muted/20 dark:to-card" />
         </div>
       </div>
 
