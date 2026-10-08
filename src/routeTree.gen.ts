@@ -19,6 +19,7 @@ import { Route as DoneraRouteImport } from './routes/donera'
 import { Route as EcosystemViewRouteImport } from './routes/ecosystem-view'
 import { Route as LaunchRouteImport } from './routes/launch'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MyBlueDotsRouteImport } from './routes/my-blue-dots'
 import { Route as RequestCampaignRouteImport } from './routes/request-campaign'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -77,6 +78,11 @@ const LaunchRoute = LaunchRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyBlueDotsRoute = MyBlueDotsRouteImport.update({
+  id: '/my-blue-dots',
+  path: '/my-blue-dots',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RequestCampaignRoute = RequestCampaignRouteImport.update({
@@ -138,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/ecosystem-view': typeof EcosystemViewRoute
   '/launch': typeof LaunchRoute
   '/login': typeof LoginRoute
+  '/my-blue-dots': typeof MyBlueDotsRoute
   '/request-campaign': typeof RequestCampaignRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
@@ -159,6 +166,7 @@ export interface FileRoutesByTo {
   '/ecosystem-view': typeof EcosystemViewRoute
   '/launch': typeof LaunchRoute
   '/login': typeof LoginRoute
+  '/my-blue-dots': typeof MyBlueDotsRoute
   '/request-campaign': typeof RequestCampaignRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
@@ -181,6 +189,7 @@ export interface FileRoutesById {
   '/ecosystem-view': typeof EcosystemViewRoute
   '/launch': typeof LaunchRoute
   '/login': typeof LoginRoute
+  '/my-blue-dots': typeof MyBlueDotsRoute
   '/request-campaign': typeof RequestCampaignRoute
   '/review': typeof ReviewRoute
   '/settings': typeof SettingsRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/ecosystem-view'
     | '/launch'
     | '/login'
+    | '/my-blue-dots'
     | '/request-campaign'
     | '/review'
     | '/settings'
@@ -225,6 +235,7 @@ export interface FileRouteTypes {
     | '/ecosystem-view'
     | '/launch'
     | '/login'
+    | '/my-blue-dots'
     | '/request-campaign'
     | '/review'
     | '/settings'
@@ -246,6 +257,7 @@ export interface FileRouteTypes {
     | '/ecosystem-view'
     | '/launch'
     | '/login'
+    | '/my-blue-dots'
     | '/request-campaign'
     | '/review'
     | '/settings'
@@ -268,6 +280,7 @@ export interface RootRouteChildren {
   EcosystemViewRoute: typeof EcosystemViewRoute
   LaunchRoute: typeof LaunchRoute
   LoginRoute: typeof LoginRoute
+  MyBlueDotsRoute: typeof MyBlueDotsRoute
   RequestCampaignRoute: typeof RequestCampaignRoute
   ReviewRoute: typeof ReviewRoute
   SettingsRoute: typeof SettingsRoute
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my-blue-dots': {
+      id: '/my-blue-dots'
+      path: '/my-blue-dots'
+      fullPath: '/my-blue-dots'
+      preLoaderRoute: typeof MyBlueDotsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/request-campaign': {
       id: '/request-campaign'
       path: '/request-campaign'
@@ -428,6 +448,7 @@ const rootRouteChildren: RootRouteChildren = {
   EcosystemViewRoute: EcosystemViewRoute,
   LaunchRoute: LaunchRoute,
   LoginRoute: LoginRoute,
+  MyBlueDotsRoute: MyBlueDotsRoute,
   RequestCampaignRoute: RequestCampaignRoute,
   ReviewRoute: ReviewRoute,
   SettingsRoute: SettingsRoute,
