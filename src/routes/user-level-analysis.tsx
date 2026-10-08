@@ -77,6 +77,7 @@ import {
 import { useAuth } from "@/auth/context";
 import { DistrictBluedots } from "@/components/user/DistrictBluedots";
 import { AggregatorBluedots } from "@/components/user/AggregatorBluedots";
+import { CoordinatorBluedots } from "@/components/user/CoordinatorBluedots";
 
 export const Route = createFileRoute("/user-level-analysis")({
   component: UserLevelAnalysis,
