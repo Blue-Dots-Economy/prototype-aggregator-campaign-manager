@@ -74,6 +74,8 @@ import {
   type Seeker,
   type CsvMeta,
 } from "@/lib/upSeekersCsv";
+import { useAuth } from "@/auth/context";
+import { DistrictBluedots } from "@/components/user/DistrictBluedots";
 
 export const Route = createFileRoute("/user-level-analysis")({
   component: UserLevelAnalysis,
