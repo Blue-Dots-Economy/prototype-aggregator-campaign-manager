@@ -122,6 +122,16 @@ export function DistrictBluedots({ district }: { district: string }) {
   const lcVal: Record<string, number> = { new7d: t.new7d, active: t.active, atRiskN: atRisk, inactive: t.inactive };
   const users = Math.max(1, Math.round(realTotal / 2.6));
 
+  const attention = useMemo(() => {
+    const quietCoords = aggs.flatMap((a) => a.coordinators).filter((c) => c.quiet);
+    const worst = [...aggs].sort((a, b) => a.activity - b.activity)[0];
+    const items: { tone: "danger" | "warn"; title: string; sub: string }[] = [];
+    if (worst) items.push({ tone: "danger", title: worst.trend === 0 ? `${worst.name} — activity flat` : `${worst.name} — activity ${worst.trend > 0 ? "▲" : "▼"} ${Math.abs(worst.trend)} pts`, sub: `lowest in district · ${pctOf(worst.inactive, worst.dots)}% inactive` });
+    if (quietCoords.length) items.push({ tone: "warn", title: `${quietCoords.length} coordinator${quietCoords.length > 1 ? "s" : ""} · 0 new onboards`, sub: quietCoords.slice(0, 2).map((c) => c.name).join(", ") + (quietCoords.length > 2 ? "…" : "") });
+    items.push({ tone: "warn", title: `Inactive share ${pctOf(t.inactive, t.dots)}%`, sub: "district-wide · re-engagement needed" });
+    return items.slice(0, 3);
+  }, [aggs, t]);
+
   const sortedAggs = useMemo(() => {
     const m = sort.dir === "asc" ? 1 : -1;
     return [...aggs].sort((a, b) => (a[sort.key] - b[sort.key]) * m).map((a) => ({ ...a, coordinators: [...a.coordinators].sort((x, y) => (x[sort.key] - y[sort.key]) * m) }));
@@ -129,6 +139,13 @@ export function DistrictBluedots({ district }: { district: string }) {
   const toggle = (id: string) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleSort = (k: SortKey) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "desc" }));
   const drillRows = useMemo(() => (drill ? genIndividuals(instance, Math.min(drill.dots, 60)) : []), [drill, instance]);
+
+  const funnel = [
+    { name: "Onboarded", value: realTotal, pct: 100 },
+    { name: "Applied (≥1 job)", value: t.applied, pct: pctOf(t.applied, realTotal) },
+    { name: "Shortlisted", value: Math.round(t.applied * 0.27), pct: pctOf(Math.round(t.applied * 0.27), realTotal) },
+    { name: "Placed", value: Math.round(t.applied * 0.08), pct: pctOf(Math.round(t.applied * 0.08), realTotal) },
+  ];
 
   const SortTh = ({ k, label }: { k: SortKey; label: string }) => (
     <th className="px-3 py-2.5 text-right font-medium"><button type="button" onClick={() => toggleSort(k)} className={cn("inline-flex items-center gap-1 hover:text-foreground", sort.key === k && "text-foreground")}>{label}<ArrowUpDown className="h-3 w-3 opacity-60" /></button></th>
@@ -190,6 +207,21 @@ export function DistrictBluedots({ district }: { district: string }) {
         ); })}
       </div>
 
+      {/* Needs attention */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Needs attention</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {attention.map((a, i) => (
+            <div key={i} className={cn("flex items-start gap-3 rounded-xl border bg-card p-4", a.tone === "danger" ? "bg-rose-500/5" : "bg-amber-500/5")}>
+              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0", a.tone === "danger" ? "bg-rose-500/15 text-rose-600 dark:text-rose-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400")}>
+                {a.tone === "danger" ? <TrendingDown className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+              </div>
+              <div><div className="text-sm font-medium leading-tight">{a.title}</div><div className="mt-0.5 text-xs text-muted-foreground">{a.sub}</div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* PROFILES + USERS metric groups */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
@@ -227,6 +259,20 @@ export function DistrictBluedots({ district }: { district: string }) {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* District funnel */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">District funnel</div>
+        <div className="rounded-xl border bg-card p-5 space-y-3">
+          {funnel.map((f) => (
+            <div key={f.name} className="flex items-center gap-4">
+              <div className="w-36 text-sm text-muted-foreground shrink-0">{f.name}</div>
+              <div className="flex-1 h-7 rounded-lg bg-muted overflow-hidden"><div className="h-full rounded-lg bg-brand" style={{ width: `${Math.max(f.pct, 1)}%` }} /></div>
+              <div className="w-32 text-right text-sm tabular-nums shrink-0"><span className="font-semibold">{fmtN(f.value)}</span> <span className="text-muted-foreground">{f.pct}%</span></div>
+            </div>
+          ))}
         </div>
       </div>
 
