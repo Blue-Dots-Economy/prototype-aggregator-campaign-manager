@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  Users, UserPlus, Sparkles, AlertTriangle, PauseCircle, RefreshCw, Search, Download, User, UserX, FileWarning, SendHorizonal,
+  Users, UserPlus, Sparkles, AlertTriangle, PauseCircle, RefreshCw, Search, User, UserX, FileWarning, SendHorizonal,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,16 +88,6 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
   }, [dots, search, lcFilter]);
   const visible = filtered.slice(0, CAP);
 
-  const downloadCsv = () => {
-    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const head = ["ID", "Joined", "Role Wanted", "Education", "Profile %", "Applications", "City", "Lifecycle"];
-    const lines = filtered.map((d) => [d.id, d.joined, d.role, d.education, d.completion, d.applications, d.city, d.lifecycle].map(esc).join(","));
-    const blob = new Blob([[head.join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `my-blue-dots-${coordName}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -161,7 +151,6 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
           <div className="text-sm font-semibold">Participants</div>
           <div className="relative ml-auto w-full sm:w-72"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by ID, role or city…" className="pl-9 bg-muted/40 border-0" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
           <Select value={lcFilter} onValueChange={setLcFilter}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Status: All</SelectItem><SelectItem value="New">New</SelectItem><SelectItem value="Active">Active</SelectItem><SelectItem value="At Risk">At Risk</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={downloadCsv} disabled={!filtered.length}><Download className="h-4 w-4" /> CSV</Button>
           <div className="text-xs text-muted-foreground whitespace-nowrap">{fmtN(filtered.length)} of {fmtN(dots.length)}</div>
         </div>
         <div className="max-h-[560px] overflow-auto">
