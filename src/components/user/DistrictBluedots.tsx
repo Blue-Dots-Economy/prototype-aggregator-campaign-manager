@@ -105,25 +105,27 @@ const LC_BADGE: Record<Lifecycle, string> = {
   Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
 };
 
-const LIFECYCLE_CARDS: { key: "newC" | "active" | "atRisk" | "inactive"; label: Lifecycle; desc: string; icon: typeof Users; accent: string; iconBg: string; iconColor: string; valueColor: string }[] = [
-  { key: "newC", label: "New", desc: "Joined ≤ 7 days ago", icon: UserPlus, accent: "from-emerald-50 to-white dark:from-emerald-950/30 dark:to-transparent", iconBg: "bg-card border border-emerald-500/30", iconColor: "text-emerald-600", valueColor: "text-emerald-600" },
-  { key: "active", label: "Active", desc: "Applied ≤ 30 days ago", icon: Users, accent: "from-blue-50 to-white dark:from-blue-950/30 dark:to-transparent", iconBg: "bg-card border border-blue-500/30", iconColor: "text-blue-600", valueColor: "text-blue-600" },
-  { key: "atRisk", label: "At Risk", desc: "Last applied 31–90 days", icon: AlertTriangle, accent: "from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent", iconBg: "bg-card border border-amber-500/30", iconColor: "text-amber-500", valueColor: "text-amber-600" },
-  { key: "inactive", label: "Inactive", desc: "Applied > 90 days or never", icon: PauseCircle, accent: "from-rose-50 to-white dark:from-rose-950/30 dark:to-transparent", iconBg: "bg-card border border-rose-500/30", iconColor: "text-rose-500", valueColor: "text-rose-600" },
+const LIFECYCLE_CARDS: { key: "newC" | "active" | "atRisk" | "inactive"; label: Lifecycle; desc: string; icon: typeof Users; iconClass: string; valueClass: string }[] = [
+  { key: "newC", label: "New", desc: "Joined ≤ 7 days ago", icon: UserPlus, iconClass: "border-emerald-500/30 text-emerald-600 bg-emerald-500/10", valueClass: "text-emerald-600" },
+  { key: "active", label: "Active", desc: "Applied ≤ 30 days ago", icon: Users, iconClass: "border-blue-500/30 text-blue-600 bg-blue-500/10", valueClass: "text-blue-600" },
+  { key: "atRisk", label: "At Risk", desc: "Last applied 31–90 days", icon: AlertTriangle, iconClass: "border-amber-500/30 text-amber-500 bg-amber-500/10", valueClass: "text-amber-600" },
+  { key: "inactive", label: "Inactive", desc: "Applied > 90 days or never", icon: PauseCircle, iconClass: "border-rose-500/30 text-rose-500 bg-rose-500/10", valueClass: "text-rose-600" },
 ];
 
-function KpiTile({ label, value, description, Icon }: { label: string; value: string; description: string; Icon: typeof Users }) {
+
+function KpiTile({ label, value, description, Icon, iconClass, valueClass }: { label: string; value: string; description: string; Icon: typeof Users; iconClass?: string; valueClass?: string }) {
   return (
     <div className="rounded-xl border bg-card p-5">
       <div className="flex items-start gap-3">
-        <div className="h-9 w-9 rounded-lg border bg-muted/40 flex items-center justify-center text-muted-foreground"><Icon className="h-4 w-4" /></div>
+        <div className={cn("h-9 w-9 rounded-lg border bg-muted/40 flex items-center justify-center text-muted-foreground", iconClass)}><Icon className="h-4 w-4" /></div>
         <div className="text-sm font-medium leading-tight">{label}</div>
       </div>
-      <div className="mt-4 text-3xl font-semibold tracking-tight tabular-nums">{value}</div>
+      <div className={cn("mt-4 text-3xl font-semibold tracking-tight tabular-nums", valueClass)}>{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{description}</div>
     </div>
   );
 }
+
 
 export function DistrictBluedots({ district }: { district: string }) {
   const instance = INSTANCE[district] ?? "UP";
@@ -184,28 +186,38 @@ export function DistrictBluedots({ district }: { district: string }) {
       </div>
 
       {/* District KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiTile label="Total Blue Dots" value={fmtN(realTotal)} description="Onboarded across the district (live)" Icon={Users} />
-        <KpiTile label="Aggregator Owners" value={fmtN(aggs.length)} description="Partner organisations" Icon={Building2} />
-        <KpiTile label="Coordinators" value={fmtN(totals.coords)} description="Across all aggregators" Icon={Layers} />
-        <KpiTile label="Applied (≥1)" value={`${pctOf(totals.applied, totals.dots)}%`} description={`${fmtN(totals.applied)} dots have applied`} Icon={Send} />
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">District totals</div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiTile label="Total Blue Dots" value={fmtN(realTotal)} description="Onboarded across the district (live)" Icon={Users} />
+          <KpiTile label="Aggregator Owners" value={fmtN(aggs.length)} description="Partner organisations" Icon={Building2} />
+          <KpiTile label="Coordinators" value={fmtN(totals.coords)} description="Across all aggregators" Icon={Layers} />
+          <KpiTile label="Applied (≥1)" value={`${pctOf(totals.applied, totals.dots)}%`} description={`${fmtN(totals.applied)} dots have applied`} Icon={Send} />
+        </div>
       </div>
 
+
       {/* Lifecycle cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {LIFECYCLE_CARDS.map((c) => {
-          const Icon = c.icon; const value = totals[c.key];
-          return (
-            <div key={c.label} className={`rounded-xl border p-5 bg-gradient-to-br ${c.accent}`}>
-              <div className={`h-10 w-10 rounded-lg ${c.iconBg} flex items-center justify-center ${c.iconColor}`}><Icon className="h-5 w-5" /></div>
-              <div className={`mt-6 text-5xl font-bold tabular-nums ${c.valueColor}`}>{fmtN(value)}</div>
-              <div className="mt-3 text-base font-semibold">{c.label}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{c.desc}</div>
-              <div className="mt-2 text-xs text-muted-foreground">{pctOf(value, totals.dots)}% of district</div>
-            </div>
-          );
-        })}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Lifecycle</div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {LIFECYCLE_CARDS.map((c) => {
+            const value = totals[c.key];
+            return (
+              <KpiTile
+                key={c.label}
+                label={c.label}
+                value={fmtN(value)}
+                description={`${pctOf(value, totals.dots)}% of district · ${c.desc}`}
+                Icon={c.icon}
+                iconClass={c.iconClass}
+                valueClass={c.valueClass}
+              />
+            );
+          })}
+        </div>
       </div>
+
 
       {/* Aggregated breakdown */}
       <div className="rounded-xl border bg-card">
