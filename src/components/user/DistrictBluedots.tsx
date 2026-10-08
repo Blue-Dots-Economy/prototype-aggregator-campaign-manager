@@ -140,13 +140,6 @@ export function DistrictBluedots({ district }: { district: string }) {
   const toggleSort = (k: SortKey) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "desc" }));
   const drillRows = useMemo(() => (drill ? genIndividuals(instance, Math.min(drill.dots, 60)) : []), [drill, instance]);
 
-  const funnel = [
-    { name: "Onboarded", value: realTotal, pct: 100 },
-    { name: "Applied (≥1 job)", value: t.applied, pct: pctOf(t.applied, realTotal) },
-    { name: "Shortlisted", value: Math.round(t.applied * 0.27), pct: pctOf(Math.round(t.applied * 0.27), realTotal) },
-    { name: "Placed", value: Math.round(t.applied * 0.08), pct: pctOf(Math.round(t.applied * 0.08), realTotal) },
-  ];
-
   const SortTh = ({ k, label }: { k: SortKey; label: string }) => (
     <th className="px-3 py-2.5 text-right font-medium"><button type="button" onClick={() => toggleSort(k)} className={cn("inline-flex items-center gap-1 hover:text-foreground", sort.key === k && "text-foreground")}>{label}<ArrowUpDown className="h-3 w-3 opacity-60" /></button></th>
   );
@@ -262,19 +255,6 @@ export function DistrictBluedots({ district }: { district: string }) {
         </div>
       </div>
 
-      {/* District funnel */}
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">District funnel</div>
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          {funnel.map((f) => (
-            <div key={f.name} className="flex items-center gap-4">
-              <div className="w-36 text-sm text-muted-foreground shrink-0">{f.name}</div>
-              <div className="flex-1 h-7 rounded-lg bg-muted overflow-hidden"><div className="h-full rounded-lg bg-brand" style={{ width: `${Math.max(f.pct, 1)}%` }} /></div>
-              <div className="w-32 text-right text-sm tabular-nums shrink-0"><span className="font-semibold">{fmtN(f.value)}</span> <span className="text-muted-foreground">{f.pct}%</span></div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* Coordinator drill-down — Agg DPG participant table style */}
       <Dialog open={!!drill} onOpenChange={(o) => !o && setDrill(null)}>
