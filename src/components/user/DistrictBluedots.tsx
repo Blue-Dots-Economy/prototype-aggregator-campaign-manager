@@ -216,15 +216,16 @@ export function DistrictBluedots({ district }: { district: string }) {
         </div>
       </div>
 
-      {/* USERS metric group */}
+      {/* NETWORK metric group */}
       <div>
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Users</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Network</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <MetricTile label="Total Job Seekers" value={fmtN(users)} caption="Unique account holders" Icon={Users} />
-          <MetricTile label="Avg Profiles / User" value={(realTotal / users).toFixed(1)} caption="Profiles managed each" Icon={TrendingUp} />
-          <MetricTile label="Avg Actions / User" value={(t.applied / users).toFixed(1)} caption="Recorded interactions" Icon={Activity} />
+          <MetricTile label="Aggregator Owners" value={fmtN(aggs.length)} caption="Partner organisations" Icon={Building2} />
+          <MetricTile label="Coordinators" value={fmtN(t.coords)} caption="Across all aggregators" Icon={Layers} />
+          <MetricTile label="Avg Blue Dots / Coordinator" value={fmtN(Math.round(realTotal / Math.max(1, t.coords)))} caption="Managed each" Icon={Users} />
         </div>
       </div>
+
 
 
       {/* Organisation → coordinator rollup (district-specific) */}
