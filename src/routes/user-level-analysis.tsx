@@ -126,6 +126,9 @@ function MetricTile({
 
 function UserLevelAnalysis() {
   const { session } = useAuth();
+  if (session?.role === "owner" && session.district) {
+    return <AggregatorBluedots orgName={session.nodeName ?? "Your organisation"} district={session.district} />;
+  }
   if (session?.role === "jfc" && session.district) {
     return <DistrictBluedots district={session.district} />;
   }
