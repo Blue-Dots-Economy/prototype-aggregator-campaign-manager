@@ -124,6 +124,14 @@ function MetricTile({
 }
 
 function UserLevelAnalysis() {
+  const { session } = useAuth();
+  if (session?.role === "jfc" && session.district) {
+    return <DistrictBluedots district={session.district} />;
+  }
+  return <CsvBluedots />;
+}
+
+function CsvBluedots() {
   const initial = useMemo(() => loadSeekers(), []);
   const [seekers, setSeekers] = useState<Seeker[]>(initial.seekers);
   const [meta, setMeta] = useState<CsvMeta>(initial.meta);
