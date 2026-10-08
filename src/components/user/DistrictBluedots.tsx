@@ -237,7 +237,7 @@ export function DistrictBluedots({ district }: { district: string }) {
         <div className="rounded-xl border bg-card overflow-x-auto">
           <table className="w-full min-w-[840px] text-sm">
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr><th className="px-3 py-2.5 font-medium">Organisation / Coordinator</th><th className="px-3 py-2.5 text-right font-medium">Coords</th><SortTh k="dots" label="Blue Dots" /><SortTh k="new7d" label="New" /><th className="px-3 py-2.5 text-right font-medium">Active %</th><th className="px-3 py-2.5 text-right font-medium">Inactive %</th><SortTh k="activity" label="Activity" /></tr>
+              <tr><th className="px-3 py-2.5 font-medium">Organisation</th><th className="px-3 py-2.5 text-right font-medium">Coords</th><SortTh k="dots" label="Blue Dots" /><SortTh k="new7d" label="New" /><th className="px-3 py-2.5 text-right font-medium">Active %</th><th className="px-3 py-2.5 text-right font-medium">Inactive %</th><SortTh k="activity" label="Activity" /></tr>
             </thead>
             <tbody>
               {sortedAggs.map((a) => (
