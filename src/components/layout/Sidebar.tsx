@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ChevronRight,
   Radar,
-  MapPin,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -145,10 +144,6 @@ export function Sidebar() {
     ...g,
     items: g.items
       .flatMap((item) => {
-        if (item.to === "/user-level-analysis") {
-          const showMbd = (role === "jfc" && !!session?.district) || role === "admin";
-          return showMbd ? [item, { to: "/my-blue-dots", label: "My Blue Dots", icon: MapPin } as NavItem] : [item];
-        }
         if (item.to !== "/launch") return [item];
         const launchItem: NavItem =
           role === "admin" || role === "jfc"
