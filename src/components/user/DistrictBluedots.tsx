@@ -1,73 +1,102 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
-  Users, UserPlus, Activity, AlertTriangle, PauseCircle, Send,
-  Search, Download, Info,
+  Users, UserPlus, AlertTriangle, PauseCircle, Send, Info,
+  ChevronRight, ChevronDown, Layers, Building2, Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Lifecycle = "New" | "Active" | "At Risk" | "Inactive";
-interface DSeeker {
-  id: string; joined: string; roleWanted: string; education: string;
-  experience: string; genderMasked: string; ageMasked: string; city: string;
-  applications: number; lifecycle: Lifecycle;
-}
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 const REAL_TOTAL: Record<string, number> = { UP: 18772, KA: 28961 };
+const AGG_NAMES: Record<string, string[]> = {
+  UP: ["Ghaziabad Skills Mission", "Modinagar Livelihoods Trust", "Loni Rozgar Kendra", "Muradnagar Collective", "Dasna Udyog Samiti", "Pilkhuwa Skill Centre"],
+  KA: ["Deshpande Foundation", "Hubli Skill Mission", "Dharwad Livelihoods Trust", "Navalgund Collective", "Kundgol Udyog Kendra", "Kalghatgi Rozgar Samiti"],
+};
 const CITIES: Record<string, string[]> = {
   UP: ["Ghaziabad", "Modinagar", "Loni", "Muradnagar", "Dasna", "Pilkhuwa"],
   KA: ["Hubli", "Dharwad", "Kalghatgi", "Kundgol", "Navalgund", "Annigeri"],
 };
-const ROLES = ["Delivery Executive", "Data Entry Operator", "Electrician", "Sales Executive", "Security Guard", "Machine Operator", "Tailor", "Driver", "Telecaller", "Housekeeping", "Warehouse Associate", "Field Technician"];
+const FIRST = ["Rahul", "Priya", "Amit", "Sunita", "Vikas", "Pooja", "Santosh", "Anjali", "Kiran", "Manoj", "Deepa", "Ravi", "Neha", "Arun", "Kavya", "Suresh"];
+const LAST = ["Patil", "Kulkarni", "Sharma", "Verma", "Gowda", "Hegde", "Yadav", "Singh", "Desai", "Naik"];
+const ROLES = ["Delivery Executive", "Data Entry Operator", "Electrician", "Sales Executive", "Security Guard", "Machine Operator", "Tailor", "Driver", "Telecaller", "Housekeeping"];
 const EDU = ["Below 10th", "10th Pass", "12th Pass", "ITI", "Diploma", "Graduate"];
 const EXP = ["Fresher", "< 1 year", "1–3 years", "3–5 years", "5+ years"];
-const GENDERS = ["M••", "F••"];
-const AGES = ["1•", "2•", "3•", "4•"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const fmtN = (n: number) => n.toLocaleString("en-IN");
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+const pctOf = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
+
+interface CoordNode { id: string; name: string; dots: number; newC: number; active: number; atRisk: number; inactive: number; applied: number; }
+interface AggNode { id: string; name: string; coordinators: CoordNode[]; dots: number; newC: number; active: number; atRisk: number; inactive: number; applied: number; }
+
+function makeCoord(instance: string, idx: number, dots: number): CoordNode {
+  const j = () => 0.8 + Math.random() * 0.4;
+  const newC = Math.round(dots * 0.03 * j());
+  const active = Math.round(dots * 0.09 * j());
+  const atRisk = Math.round(dots * 0.19 * j());
+  const inactive = Math.max(0, dots - newC - active - atRisk);
+  const applied = Math.round(dots * (0.45 + Math.random() * 0.2));
+  return { id: `${instance}-C${idx}`, name: `${pick(FIRST)} ${pick(LAST)}`, dots, newC, active, atRisk, inactive, applied };
 }
 
-function genSeekers(instance: string, n: number): DSeeker[] {
-  const cities = CITIES[instance] ?? CITIES.UP;
-  const now = Date.now();
-  const out: DSeeker[] = [];
-  for (let i = 0; i < n; i++) {
-    const daysAgo = Math.floor(Math.random() * 240);
-    const joined = new Date(now - daysAgo * 86400000);
-    const apps = Math.random() < 0.45 ? 0 : 1 + Math.floor(Math.random() * 8);
-    const lastApplyDays = apps > 0 ? Math.floor(Math.random() * 180) : null;
-    let lifecycle: Lifecycle;
-    if (daysAgo <= 7) lifecycle = "New";
-    else if (lastApplyDays !== null && lastApplyDays <= 30) lifecycle = "Active";
-    else if (lastApplyDays !== null && lastApplyDays <= 90) lifecycle = "At Risk";
-    else lifecycle = "Inactive";
-    out.push({
-      id: `${instance}-${100000 + Math.floor(Math.random() * 899999)}`,
-      joined: joined.toISOString(),
-      roleWanted: pick(ROLES), education: pick(EDU), experience: pick(EXP),
-      genderMasked: pick(GENDERS), ageMasked: pick(AGES), city: pick(cities),
-      applications: apps, lifecycle,
-    });
+function splitInto(total: number, parts: number, min: number): number[] {
+  const w = Array.from({ length: parts }, () => 0.5 + Math.random());
+  const ws = w.reduce((a, b) => a + b, 0);
+  const out: number[] = [];
+  let rem = total;
+  for (let i = 0; i < parts; i++) {
+    const v = i === parts - 1 ? Math.max(min, rem) : Math.max(min, Math.round((total * w[i]) / ws));
+    out.push(v);
+    rem -= v;
   }
   return out;
 }
 
-const LIFECYCLE_META: Record<Lifecycle, { desc: string; icon: typeof Users; accent: string; iconBg: string; iconColor: string; valueColor: string }> = {
-  New: { desc: "Joined ≤ 7 days ago", icon: UserPlus, accent: "from-emerald-50 to-white dark:from-emerald-950/30 dark:to-transparent", iconBg: "bg-card border border-emerald-500/30", iconColor: "text-emerald-600", valueColor: "text-emerald-600" },
-  Active: { desc: "Applied ≤ 30 days ago", icon: Users, accent: "from-blue-50 to-white dark:from-blue-950/30 dark:to-transparent", iconBg: "bg-card border border-blue-500/30", iconColor: "text-blue-600", valueColor: "text-blue-600" },
-  "At Risk": { desc: "Last applied 31–90 days", icon: AlertTriangle, accent: "from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent", iconBg: "bg-card border border-amber-500/30", iconColor: "text-amber-500", valueColor: "text-amber-600" },
-  Inactive: { desc: "Applied > 90 days or never", icon: PauseCircle, accent: "from-rose-50 to-white dark:from-rose-950/30 dark:to-transparent", iconBg: "bg-card border border-rose-500/30", iconColor: "text-rose-500", valueColor: "text-rose-600" },
-};
+function genHierarchy(instance: string, realTotal: number): AggNode[] {
+  const names = AGG_NAMES[instance] ?? AGG_NAMES.UP;
+  const aggCount = Math.min(names.length, 5 + Math.floor(Math.random() * 2));
+  const aggTotals = splitInto(realTotal, aggCount, 200);
+  let coordIdx = 0;
+  return aggTotals.map((aggTotal, i) => {
+    const cCount = 2 + Math.floor(Math.random() * 5);
+    const coordDots = splitInto(aggTotal, cCount, 20);
+    const coordinators = coordDots.map((d) => makeCoord(instance, coordIdx++, d));
+    const sum = (k: keyof CoordNode) => coordinators.reduce((a, c) => a + (c[k] as number), 0);
+    return {
+      id: `${instance}-A${i}`, name: names[i % names.length], coordinators,
+      dots: sum("dots"), newC: sum("newC"), active: sum("active"), atRisk: sum("atRisk"), inactive: sum("inactive"), applied: sum("applied"),
+    };
+  });
+}
+
+// Sample individuals for the coordinator drill-down.
+interface Indiv { id: string; joined: string; role: string; education: string; experience: string; applications: number; lifecycle: Lifecycle; city: string; }
+function genIndividuals(instance: string, n: number): Indiv[] {
+  const cities = CITIES[instance] ?? CITIES.UP;
+  const now = Date.now();
+  return Array.from({ length: n }, () => {
+    const daysAgo = Math.floor(Math.random() * 240);
+    const apps = Math.random() < 0.45 ? 0 : 1 + Math.floor(Math.random() * 8);
+    const lastApply = apps > 0 ? Math.floor(Math.random() * 180) : null;
+    let lifecycle: Lifecycle;
+    if (daysAgo <= 7) lifecycle = "New";
+    else if (lastApply !== null && lastApply <= 30) lifecycle = "Active";
+    else if (lastApply !== null && lastApply <= 90) lifecycle = "At Risk";
+    else lifecycle = "Inactive";
+    const d = new Date(now - daysAgo * 86400000);
+    return {
+      id: `${instance}-${100000 + Math.floor(Math.random() * 899999)}`,
+      joined: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
+      role: pick(ROLES), education: pick(EDU), experience: pick(EXP), applications: apps, lifecycle, city: pick(cities),
+    };
+  });
+}
 
 const LC_BADGE: Record<Lifecycle, string> = {
   New: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
@@ -76,9 +105,14 @@ const LC_BADGE: Record<Lifecycle, string> = {
   Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
 };
 
-const CAP = 500;
+const LIFECYCLE_CARDS: { key: "newC" | "active" | "atRisk" | "inactive"; label: Lifecycle; desc: string; icon: typeof Users; accent: string; iconBg: string; iconColor: string; valueColor: string }[] = [
+  { key: "newC", label: "New", desc: "Joined ≤ 7 days ago", icon: UserPlus, accent: "from-emerald-50 to-white dark:from-emerald-950/30 dark:to-transparent", iconBg: "bg-card border border-emerald-500/30", iconColor: "text-emerald-600", valueColor: "text-emerald-600" },
+  { key: "active", label: "Active", desc: "Applied ≤ 30 days ago", icon: Users, accent: "from-blue-50 to-white dark:from-blue-950/30 dark:to-transparent", iconBg: "bg-card border border-blue-500/30", iconColor: "text-blue-600", valueColor: "text-blue-600" },
+  { key: "atRisk", label: "At Risk", desc: "Last applied 31–90 days", icon: AlertTriangle, accent: "from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent", iconBg: "bg-card border border-amber-500/30", iconColor: "text-amber-500", valueColor: "text-amber-600" },
+  { key: "inactive", label: "Inactive", desc: "Applied > 90 days or never", icon: PauseCircle, accent: "from-rose-50 to-white dark:from-rose-950/30 dark:to-transparent", iconBg: "bg-card border border-rose-500/30", iconColor: "text-rose-500", valueColor: "text-rose-600" },
+];
 
-function MetricTile({ label, value, description, Icon }: { label: string; value: string; description: string; Icon: typeof Users }) {
+function KpiTile({ label, value, description, Icon }: { label: string; value: string; description: string; Icon: typeof Users }) {
   return (
     <div className="rounded-xl border bg-card p-5">
       <div className="flex items-start gap-3">
@@ -93,38 +127,39 @@ function MetricTile({ label, value, description, Icon }: { label: string; value:
 
 export function DistrictBluedots({ district }: { district: string }) {
   const instance = INSTANCE[district] ?? "UP";
-  const seekers = useMemo(() => genSeekers(instance, 600), [instance]);
+  const realTotal = REAL_TOTAL[instance] ?? 0;
+  const aggs = useMemo(() => genHierarchy(instance, realTotal), [instance, realTotal]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
-  const [lcFilter, setLcFilter] = useState<string>("all");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [drill, setDrill] = useState<CoordNode | null>(null);
 
-  const counts = useMemo(() => {
-    const c = { New: 0, Active: 0, "At Risk": 0, Inactive: 0 } as Record<Lifecycle, number>;
-    let applied = 0, totalApps = 0;
-    for (const s of seekers) { c[s.lifecycle]++; if (s.applications > 0) applied++; totalApps += s.applications; }
-    return { c, applied, totalApps, avg: seekers.length ? (totalApps / seekers.length).toFixed(1) : "0" };
-  }, [seekers]);
+  const totals = useMemo(() => {
+    const t = { dots: 0, newC: 0, active: 0, atRisk: 0, inactive: 0, applied: 0, coords: 0 };
+    for (const a of aggs) {
+      t.dots += a.dots; t.newC += a.newC; t.active += a.active; t.atRisk += a.atRisk; t.inactive += a.inactive; t.applied += a.applied; t.coords += a.coordinators.length;
+    }
+    return t;
+  }, [aggs]);
 
-  const filtered = useMemo(() => {
+  const filteredAggs = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return seekers.filter((s) => {
-      if (lcFilter !== "all" && s.lifecycle !== lcFilter) return false;
-      if (roleFilter !== "all" && s.roleWanted !== roleFilter) return false;
-      if (q && !(s.id.toLowerCase().includes(q) || s.roleWanted.toLowerCase().includes(q) || s.city.toLowerCase().includes(q))) return false;
-      return true;
-    });
-  }, [seekers, search, lcFilter, roleFilter]);
-  const visible = filtered.slice(0, CAP);
+    if (!q) return aggs;
+    return aggs
+      .map((a) => {
+        const nameHit = a.name.toLowerCase().includes(q);
+        const coords = a.coordinators.filter((c) => c.name.toLowerCase().includes(q));
+        if (nameHit) return a;
+        if (coords.length) return { ...a, coordinators: coords };
+        return null;
+      })
+      .filter(Boolean) as AggNode[];
+  }, [aggs, search]);
 
-  const downloadCsv = () => {
-    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const head = ["Seeker ID", "Joined", "Role Wanted", "Education", "Experience", "Gender", "Age", "City", "Applications", "Lifecycle"];
-    const lines = filtered.map((s) => [s.id, fmtDate(s.joined), s.roleWanted, s.education, s.experience, s.genderMasked, s.ageMasked, s.city, s.applications, s.lifecycle].map(esc).join(","));
-    const blob = new Blob([[head.join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `my-bluedots-${district}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  };
+  const toggle = (id: string) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const drillRows = useMemo(() => (drill ? genIndividuals(instance, Math.min(drill.dots, 80)) : []), [drill, instance]);
+
+  const Num = ({ v, muted }: { v: number; muted?: boolean }) => <td className={cn("px-3 py-2.5 text-right tabular-nums", muted && "text-muted-foreground")}>{fmtN(v)}</td>;
 
   return (
     <div className="space-y-6">
@@ -135,7 +170,7 @@ export function DistrictBluedots({ district }: { district: string }) {
             <h1 className="text-3xl font-bold tracking-tight">My Bluedots</h1>
             <Badge variant="secondary" className="bg-brand-soft text-brand">{district} · {instance}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">District roster — every Blue Dot onboarded across {district}.</p>
+          <p className="text-sm text-muted-foreground mt-1">District rollup — Blue Dots aggregated by aggregator owner and coordinator across {district}.</p>
         </div>
         <Button className="gap-2"><UserPlus className="h-4 w-4" /> Add Participants</Button>
       </div>
@@ -144,102 +179,142 @@ export function DistrictBluedots({ district }: { district: string }) {
       <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <p className="text-amber-800 dark:text-amber-300">
-          <span className="font-medium">Preview with sample data.</span> Live count for {district} is {fmtN(REAL_TOTAL[instance] ?? 0)} seekers in the database — this view populates once the Blue Dots database is connected.
+          <span className="font-medium">Preview.</span> District totals use the live count ({fmtN(realTotal)} for {district}); the aggregator / coordinator grouping is sample data until the Blue Dots database is connected.
         </p>
+      </div>
+
+      {/* District KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiTile label="Total Blue Dots" value={fmtN(realTotal)} description="Onboarded across the district (live)" Icon={Users} />
+        <KpiTile label="Aggregator Owners" value={fmtN(aggs.length)} description="Partner organisations" Icon={Building2} />
+        <KpiTile label="Coordinators" value={fmtN(totals.coords)} description="Across all aggregators" Icon={Layers} />
+        <KpiTile label="Applied (≥1)" value={`${pctOf(totals.applied, totals.dots)}%`} description={`${fmtN(totals.applied)} dots have applied`} Icon={Send} />
       </div>
 
       {/* Lifecycle cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {(Object.keys(LIFECYCLE_META) as Lifecycle[]).map((lc) => {
-          const m = LIFECYCLE_META[lc]; const Icon = m.icon; const value = counts.c[lc];
-          const pct = seekers.length ? Math.round((value / seekers.length) * 100) : 0;
+        {LIFECYCLE_CARDS.map((c) => {
+          const Icon = c.icon; const value = totals[c.key];
           return (
-            <div key={lc} className={`rounded-xl border p-5 bg-gradient-to-br ${m.accent}`}>
-              <div className={`h-10 w-10 rounded-lg ${m.iconBg} flex items-center justify-center ${m.iconColor}`}><Icon className="h-5 w-5" /></div>
-              <div className={`mt-6 text-5xl font-bold tabular-nums ${m.valueColor}`}>{fmtN(value)}</div>
-              <div className="mt-3 text-base font-semibold">{lc}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{m.desc}</div>
-              <div className="mt-2 text-xs text-muted-foreground">{pct}% of sample</div>
+            <div key={c.label} className={`rounded-xl border p-5 bg-gradient-to-br ${c.accent}`}>
+              <div className={`h-10 w-10 rounded-lg ${c.iconBg} flex items-center justify-center ${c.iconColor}`}><Icon className="h-5 w-5" /></div>
+              <div className={`mt-6 text-5xl font-bold tabular-nums ${c.valueColor}`}>{fmtN(value)}</div>
+              <div className="mt-3 text-base font-semibold">{c.label}</div>
+              <div className="mt-1 text-sm text-muted-foreground">{c.desc}</div>
+              <div className="mt-2 text-xs text-muted-foreground">{pctOf(value, totals.dots)}% of district</div>
             </div>
           );
         })}
       </div>
 
-      {/* Metric tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricTile label="Total Seekers" value={fmtN(REAL_TOTAL[instance] ?? 0)} description="In this district (live)" Icon={Users} />
-        <MetricTile label="Applied (≥1)" value={fmtN(counts.applied)} description={`${seekers.length ? Math.round((counts.applied / seekers.length) * 100) : 0}% of sample`} Icon={Send} />
-        <MetricTile label="Avg Applications" value={counts.avg} description="Per seeker (sample)" Icon={Activity} />
-        <MetricTile label="New · 7d" value={fmtN(counts.c.New)} description="Joined in last week (sample)" Icon={UserPlus} />
-      </div>
-
-      {/* Roster */}
+      {/* Aggregated breakdown */}
       <div className="rounded-xl border bg-card">
         <div className="p-4 flex flex-wrap items-center gap-3 border-b">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search by seeker ID, role or city…" className="pl-9 bg-muted/40 border-0" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <div>
+            <div className="text-sm font-semibold">Aggregator & coordinator rollup</div>
+            <div className="text-xs text-muted-foreground">Expand an aggregator to see its coordinators · click a coordinator to view their Blue Dots</div>
           </div>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-[200px]"><SelectValue placeholder="Role" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Role: All</SelectItem>
-              {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={lcFilter} onValueChange={setLcFilter}>
-            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Lifecycle" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Status: All</SelectItem>
-              <SelectItem value="New">New</SelectItem>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="At Risk">At Risk</SelectItem>
-              <SelectItem value="Inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={downloadCsv} disabled={!filtered.length}><Download className="h-4 w-4" /> CSV</Button>
-          <div className="text-xs text-muted-foreground whitespace-nowrap">{fmtN(filtered.length)} of {fmtN(seekers.length)}</div>
+          <div className="relative ml-auto w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search aggregator or coordinator…" className="pl-9 bg-muted/40 border-0" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
         </div>
-        <div className="max-h-[560px] overflow-auto">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[920px] text-sm">
-            <thead className="sticky top-0 z-10 bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-2.5 font-medium">Seeker</th>
-                <th className="px-4 py-2.5 font-medium">Joined</th>
-                <th className="px-4 py-2.5 font-medium">Role Wanted</th>
-                <th className="px-4 py-2.5 font-medium">Education</th>
-                <th className="px-4 py-2.5 font-medium">Experience</th>
-                <th className="px-4 py-2.5 font-medium">Gender / Age</th>
-                <th className="px-4 py-2.5 font-medium text-right">Applications</th>
-                <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-3 py-2.5 font-medium">Aggregator / Coordinator</th>
+                <th className="px-3 py-2.5 font-medium text-right">Coordinators</th>
+                <th className="px-3 py-2.5 font-medium text-right">Blue Dots</th>
+                <th className="px-3 py-2.5 font-medium text-right">New</th>
+                <th className="px-3 py-2.5 font-medium text-right">Active</th>
+                <th className="px-3 py-2.5 font-medium text-right">At Risk</th>
+                <th className="px-3 py-2.5 font-medium text-right">Inactive</th>
+                <th className="px-3 py-2.5 font-medium text-right">Applied</th>
+                <th className="px-3 py-2.5 font-medium text-right">Applied %</th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((s) => (
-                <tr key={s.id} className="border-t hover:bg-muted/30">
-                  <td className="px-4 py-2.5">
-                    <div className="font-mono text-xs font-semibold text-primary">{s.id}</div>
-                    <div className="text-[11px] text-muted-foreground">{s.city}</div>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(s.joined)}</td>
-                  <td className="px-4 py-2.5">{s.roleWanted}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{s.education}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{s.experience}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{s.genderMasked} · {s.ageMasked}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{s.applications}</td>
-                  <td className="px-4 py-2.5"><Badge variant="outline" className={`rounded-full ${LC_BADGE[s.lifecycle]}`}>{s.lifecycle}</Badge></td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center text-sm text-muted-foreground py-10">No seekers match your filters.</td></tr>
+              {filteredAggs.map((a) => {
+                const open = expanded.has(a.id);
+                return (
+                  <Fragment key={a.id}>
+                    <tr className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => toggle(a.id)}>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2 font-medium">
+                          {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                          <Building2 className="h-4 w-4 text-brand" />
+                          {a.name}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{fmtN(a.coordinators.length)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtN(a.dots)}</td>
+                      <Num v={a.newC} /><Num v={a.active} /><Num v={a.atRisk} /><Num v={a.inactive} /><Num v={a.applied} />
+                      <td className="px-3 py-2.5 text-right tabular-nums">{pctOf(a.applied, a.dots)}%</td>
+                    </tr>
+                    {open && a.coordinators.map((c) => (
+                      <tr key={c.id} className="border-t bg-muted/20 hover:bg-muted/40 cursor-pointer" onClick={() => setDrill(c)}>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2 pl-6 text-muted-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full bg-brand/60" />
+                            <span className="text-foreground">{c.name}</span>
+                            <span className="text-[11px] underline decoration-dotted">view dots</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">—</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-medium">{fmtN(c.dots)}</td>
+                        <Num v={c.newC} muted /><Num v={c.active} muted /><Num v={c.atRisk} muted /><Num v={c.inactive} muted /><Num v={c.applied} muted />
+                        <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{pctOf(c.applied, c.dots)}%</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
+              {filteredAggs.length === 0 && (
+                <tr><td colSpan={9} className="text-center text-sm text-muted-foreground py-10">No aggregators or coordinators match your search.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-        {filtered.length > CAP && (
-          <div className="p-3 text-center text-xs text-muted-foreground border-t">Showing first {fmtN(CAP)} of {fmtN(filtered.length)} — refine with search or filters.</div>
-        )}
       </div>
+
+      {/* Coordinator drill-down: individual seekers */}
+      <Dialog open={!!drill} onOpenChange={(o) => !o && setDrill(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{drill?.name}</DialogTitle>
+            <DialogDescription>
+              {drill ? `${fmtN(drill.dots)} Blue Dots onboarded · showing a sample of ${fmtN(Math.min(drill.dots, 80))}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[460px] overflow-auto rounded-lg border">
+            <table className="w-full min-w-[620px] text-sm">
+              <thead className="sticky top-0 bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Seeker</th>
+                  <th className="px-3 py-2 font-medium">Joined</th>
+                  <th className="px-3 py-2 font-medium">Role Wanted</th>
+                  <th className="px-3 py-2 font-medium">Education</th>
+                  <th className="px-3 py-2 font-medium text-right">Apps</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {drillRows.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="px-3 py-2"><div className="font-mono text-xs text-primary">{r.id}</div><div className="text-[11px] text-muted-foreground">{r.city}</div></td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.joined}</td>
+                    <td className="px-3 py-2">{r.role}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.education}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.applications}</td>
+                    <td className="px-3 py-2"><Badge variant="outline" className={`rounded-full ${LC_BADGE[r.lifecycle]}`}>{r.lifecycle}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
