@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import {
   Users, UserPlus, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
-  RefreshCw, TrendingUp, Activity, ChevronRight, ChevronDown,
+  RefreshCw, TrendingUp, ChevronRight, ChevronDown,
 
   ArrowUpDown, TrendingDown, Minus,
 } from "lucide-react";
