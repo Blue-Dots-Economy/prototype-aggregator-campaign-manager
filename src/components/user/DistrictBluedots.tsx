@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import {
-  Users, UserPlus, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
+  Users, UserPlus, User, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
   RefreshCw, TrendingUp, ChevronRight, ChevronDown,
 
   ArrowUpDown, TrendingDown, Minus, Info,
@@ -20,8 +20,6 @@ const AGG_NAMES: Record<string, string[]> = {
   KA: ["Deshpande Foundation", "Hubli Skill Mission", "Dharwad Livelihoods Trust", "Navalgund Collective", "Kundgol Udyog Kendra", "Kalghatgi Rozgar Samiti"],
 };
 const CITIES: Record<string, string[]> = { UP: ["Ghaziabad", "Modinagar", "Loni", "Muradnagar", "Dasna", "Pilkhuwa"], KA: ["Hubli", "Dharwad", "Kalghatgi", "Kundgol", "Navalgund", "Annigeri"] };
-const FIRST = ["Rahul", "Priya", "Amit", "Sunita", "Vikas", "Pooja", "Santosh", "Anjali", "Kiran", "Manoj", "Deepa", "Ravi", "Neha", "Arun", "Kavya", "Suresh"];
-const LAST = ["Patil", "Kulkarni", "Sharma", "Verma", "Gowda", "Hegde", "Yadav", "Singh", "Desai", "Naik"];
 const ROLES = ["Delivery Executive", "Data Entry Operator", "Electrician", "Sales Executive", "Security Guard", "Machine Operator", "Tailor", "Driver", "Telecaller", "Housekeeping"];
 const EDU = ["Below 10th", "10th Pass", "12th Pass", "ITI", "Diploma", "Graduate"];
 const AV = ["bg-amber-500", "bg-rose-500", "bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-cyan-600", "bg-fuchsia-500", "bg-indigo-500"];
@@ -43,7 +41,7 @@ function makeCoord(instance: string, idx: number, dots: number): Node {
   const applied = Math.round(dots * (0.45 + Math.random() * 0.2));
   const activity = clamp(Math.round((active / dots / 0.15) * 55 + (new7d / dots / 0.045) * 35 + 6), 6, 100);
   const trend = quiet ? -(2 + Math.floor(Math.random() * 7)) : Math.round(Math.random() * 16 - 8);
-  return { id: `${instance}-C${idx}`, name: `${pick(FIRST)} ${pick(LAST)}`, dots, new7d, active, inactive, applied, activity, trend, quiet };
+  return { id: `${instance}-C${idx}`, name: `CRD-${instance}-${String(idx + 1).padStart(3, "0")}`, dots, new7d, active, inactive, applied, activity, trend, quiet };
 }
 function splitInto(total: number, parts: number, min: number): number[] {
   const w = Array.from({ length: parts }, () => 0.5 + Math.random());
@@ -65,7 +63,7 @@ function genHierarchy(instance: string, realTotal: number): AggNode[] {
   });
 }
 
-interface Indiv { id: string; name: string; initials: string; color: string; joined: string; lastSeen: string; role: string; education: string; applications: number; lifecycle: string; completion: number; city: string; }
+interface Indiv { id: string; color: string; joined: string; lastSeen: string; role: string; education: string; applications: number; lifecycle: string; completion: number; city: string; }
 function genIndividuals(instance: string, n: number): Indiv[] {
   const cities = CITIES[instance] ?? CITIES.UP; const now = Date.now();
   return Array.from({ length: n }, () => {
@@ -75,9 +73,8 @@ function genIndividuals(instance: string, n: number): Indiv[] {
     let lifecycle = "Inactive";
     if (daysAgo <= 7) lifecycle = "New"; else if (lastApply !== null && lastApply <= 30) lifecycle = "Active"; else if (lastApply !== null && lastApply <= 90) lifecycle = "At Risk";
     const d = new Date(now - daysAgo * 86400000);
-    const name = `${pick(FIRST)} ${pick(LAST)}`;
     const seen = 1 + Math.floor(Math.random() * 20);
-    return { id: `${instance}-${100000 + Math.floor(Math.random() * 899999)}`, name, initials: name.split(" ").map((p) => p[0]).join(""), color: pick(AV), joined: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`, lastSeen: `last seen ${seen}d ago`, role: pick(ROLES), education: pick(EDU), applications: apps, lifecycle, completion: pick([100, 100, 100, 80, 60, 40]), city: pick(cities) };
+    return { id: `${instance}-${100000 + Math.floor(Math.random() * 899999)}`, color: pick(AV), joined: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`, lastSeen: `last seen ${seen}d ago`, role: pick(ROLES), education: pick(EDU), applications: apps, lifecycle, completion: pick([100, 100, 100, 80, 60, 40]), city: pick(cities) };
   });
 }
 
@@ -302,7 +299,7 @@ export function DistrictBluedots({ district }: { district: string }) {
               <tbody>
                 {drillRows.map((r) => (
                   <tr key={r.id} className="border-t hover:bg-muted/20">
-                    <td className="px-4 py-2.5"><div className="flex items-center gap-3"><div className={cn("h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0", r.color)}>{r.initials}</div><div><div className="font-medium leading-tight">{r.name}</div><div className="font-mono text-[11px] text-muted-foreground">{r.id} · {r.city}</div></div></div></td>
+                    <td className="px-4 py-2.5"><div className="flex items-center gap-3"><div className={cn("h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0", r.color)}><User className="h-4 w-4" /></div><div><div className="font-mono text-xs font-medium text-foreground">{r.id}</div><div className="text-[11px] text-muted-foreground">{r.city}</div></div></div></td>
                     <td className="px-4 py-2.5 whitespace-nowrap"><div className="text-foreground">{r.joined}</div><div className="text-[11px] text-muted-foreground">{r.lastSeen}</div></td>
                     <td className="px-4 py-2.5"><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${r.completion}%` }} /></div><span className="text-xs tabular-nums text-muted-foreground">{r.completion}%</span></div></td>
                     <td className="px-4 py-2.5 text-muted-foreground">{r.role}</td>
