@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import {
   Users, UserPlus, Building2, Layers, Send, AlertTriangle, Clock,
-  Info, ChevronRight, ChevronDown, ArrowUpDown, TrendingUp, TrendingDown,
+  Info, ChevronRight, ChevronDown, ArrowUpDown, TrendingUp, TrendingDown, Minus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -108,11 +108,15 @@ function KpiTile({ label, value, description, Icon, cardClass }: { label: string
     </div>
   );
 }
-const Trend = ({ v, unit = "pts" }: { v: number; unit?: string }) => (
-  <span className={cn("inline-flex items-center gap-0.5 font-medium", v >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
-    {v >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}{v >= 0 ? "+" : ""}{v} {unit}
-  </span>
-);
+const Trend = ({ v, unit = "pts" }: { v: number; unit?: string }) => {
+  const flat = v === 0;
+  const Icon = flat ? Minus : v > 0 ? TrendingUp : TrendingDown;
+  return (
+    <span className={cn("inline-flex items-center gap-0.5 font-medium", flat ? "text-muted-foreground" : v > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+      <Icon className="h-3 w-3" />{v > 0 ? "+" : ""}{v} {unit}
+    </span>
+  );
+};
 
 type SortKey = "activity" | "dots" | "new7d";
 
@@ -135,7 +139,7 @@ export function DistrictBluedots({ district }: { district: string }) {
     const quietCoords = aggs.flatMap((a) => a.coordinators).filter((c) => c.quiet);
     const worst = [...aggs].sort((a, b) => a.activity - b.activity)[0];
     const items: { tone: "danger" | "warn"; title: string; sub: string }[] = [];
-    if (worst) items.push({ tone: "danger", title: `${worst.name} — activity ${worst.trend >= 0 ? "▲" : "▼"} ${Math.abs(worst.trend)} pts`, sub: `lowest in district · ${pctOf(worst.inactive, worst.dots)}% inactive` });
+    if (worst) items.push({ tone: "danger", title: worst.trend === 0 ? `${worst.name} — activity flat` : `${worst.name} — activity ${worst.trend > 0 ? "▲" : "▼"} ${Math.abs(worst.trend)} pts`, sub: `lowest in district · ${pctOf(worst.inactive, worst.dots)}% inactive` });
     if (quietCoords.length) items.push({ tone: "warn", title: `${quietCoords.length} coordinator${quietCoords.length > 1 ? "s" : ""} · 0 new onboards`, sub: quietCoords.slice(0, 2).map((c) => c.name).join(", ") + (quietCoords.length > 2 ? "…" : "") });
     items.push({ tone: "warn", title: `Inactive share ${pctOf(totals.inactive, totals.dots)}%`, sub: "district-wide · re-engagement needed" });
     return items.slice(0, 3);
@@ -189,7 +193,7 @@ export function DistrictBluedots({ district }: { district: string }) {
       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{pctOf(n.inactive, n.dots)}%</td>
       <td className="px-3 py-2.5">
         <div className="flex items-center justify-end gap-2">
-          {n.trend >= 0 ? <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <TrendingDown className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />}
+          {n.trend === 0 ? <Minus className="h-3.5 w-3.5 text-muted-foreground" /> : n.trend > 0 ? <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <TrendingDown className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />}
           <div className="h-2 w-20 rounded-full bg-muted overflow-hidden"><div className={cn("h-full rounded-full", actColor(n.activity))} style={{ width: `${n.activity}%` }} /></div>
           <span className="tabular-nums font-medium w-6 text-right">{n.activity}</span>
         </div>
