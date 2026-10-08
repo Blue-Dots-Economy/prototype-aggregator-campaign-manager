@@ -210,6 +210,7 @@ export function DistrictBluedots({ district }: { district: string }) {
                 value={fmtN(value)}
                 description={`${pctOf(value, totals.dots)}% of district · ${c.desc}`}
                 Icon={c.icon}
+                cardClass={c.accent}
                 iconClass={c.iconClass}
                 valueClass={c.valueClass}
               />
