@@ -1,15 +1,16 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import {
   Users, UserPlus, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
   RefreshCw, TrendingUp, ChevronRight, ChevronDown,
 
-  ArrowUpDown, TrendingDown, Minus,
+  ArrowUpDown, TrendingDown, Minus, Info,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 const REAL_TOTAL: Record<string, number> = { UP: 18772, KA: 28961 };
@@ -141,8 +142,24 @@ export function DistrictBluedots({ district }: { district: string }) {
   const toggleSort = (k: SortKey) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "desc" }));
   const drillRows = useMemo(() => (drill ? genIndividuals(instance, Math.min(drill.dots, 60)) : []), [drill, instance]);
 
-  const SortTh = ({ k, label }: { k: SortKey; label: string }) => (
-    <th className="px-3 py-2.5 text-right font-medium"><button type="button" onClick={() => toggleSort(k)} className={cn("inline-flex items-center gap-1 hover:text-foreground", sort.key === k && "text-foreground")}>{label}<ArrowUpDown className="h-3 w-3 opacity-60" /></button></th>
+  const SortTh = ({ k, label, info }: { k: SortKey; label: string; info?: ReactNode }) => (
+    <th className="px-3 py-2.5 text-right font-medium">
+      <span className="inline-flex items-center gap-1 justify-end">
+        <button type="button" onClick={() => toggleSort(k)} className={cn("inline-flex items-center gap-1 hover:text-foreground", sort.key === k && "text-foreground")}>
+          {label}<ArrowUpDown className="h-3 w-3 opacity-60" />
+        </button>
+        {info && (
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label={`About ${label}`} className="text-muted-foreground hover:text-foreground"><Info className="h-3.5 w-3.5" /></button>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="end" className="max-w-[260px] text-left text-xs font-normal normal-case tracking-normal leading-relaxed">{info}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </span>
+    </th>
   );
   const TrendIcon = ({ v, sz = "h-3.5 w-3.5" }: { v: number; sz?: string }) => v === 0 ? <Minus className={cn(sz, "text-muted-foreground")} /> : v > 0 ? <TrendingUp className={cn(sz, "text-emerald-600 dark:text-emerald-400")} /> : <TrendingDown className={cn(sz, "text-rose-600 dark:text-rose-400")} />;
   const Row = ({ n, kind }: { n: Node; kind: "agg" | "coord" }) => (
@@ -237,7 +254,19 @@ export function DistrictBluedots({ district }: { district: string }) {
         <div className="rounded-xl border bg-card overflow-x-auto">
           <table className="w-full min-w-[840px] text-sm">
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr><th className="px-3 py-2.5 font-medium">Organisation</th><th className="px-3 py-2.5 text-right font-medium">Coords</th><SortTh k="dots" label="Blue Dots" /><SortTh k="new7d" label="New" /><th className="px-3 py-2.5 text-right font-medium">Active %</th><th className="px-3 py-2.5 text-right font-medium">Inactive %</th><SortTh k="activity" label="Activity" /></tr>
+              <tr><th className="px-3 py-2.5 font-medium">Organisation</th><th className="px-3 py-2.5 text-right font-medium">Coords</th><SortTh k="dots" label="Blue Dots" /><SortTh k="new7d" label="New" /><th className="px-3 py-2.5 text-right font-medium">Active %</th><th className="px-3 py-2.5 text-right font-medium">Inactive %</th><SortTh
+                k="activity"
+                label="Activity"
+                info={
+                  <div className="space-y-1.5">
+                    <div><span className="font-medium text-foreground">Activity score (0–100)</span> — blends recent onboarding, active share, and the trend vs the previous period.</div>
+                    <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 60+ · healthy</div>
+                    <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> 40–59 · slipping</div>
+                    <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> below 40 · low</div>
+                    <div>Arrow shows the change vs last period: ▲ up · ▼ down · – flat.</div>
+                  </div>
+                }
+              /></tr>
             </thead>
             <tbody>
               {sortedAggs.map((a) => (
