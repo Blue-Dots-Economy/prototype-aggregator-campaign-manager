@@ -105,22 +105,22 @@ const LC_BADGE: Record<Lifecycle, string> = {
   Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
 };
 
-const LIFECYCLE_CARDS: { key: "newC" | "active" | "atRisk" | "inactive"; label: Lifecycle; desc: string; icon: typeof Users; iconClass: string; valueClass: string }[] = [
-  { key: "newC", label: "New", desc: "Joined ≤ 7 days ago", icon: UserPlus, iconClass: "border-emerald-500/30 text-emerald-600 bg-emerald-500/10", valueClass: "text-emerald-600" },
-  { key: "active", label: "Active", desc: "Applied ≤ 30 days ago", icon: Users, iconClass: "border-blue-500/30 text-blue-600 bg-blue-500/10", valueClass: "text-blue-600" },
-  { key: "atRisk", label: "At Risk", desc: "Last applied 31–90 days", icon: AlertTriangle, iconClass: "border-amber-500/30 text-amber-500 bg-amber-500/10", valueClass: "text-amber-600" },
-  { key: "inactive", label: "Inactive", desc: "Applied > 90 days or never", icon: PauseCircle, iconClass: "border-rose-500/30 text-rose-500 bg-rose-500/10", valueClass: "text-rose-600" },
+const LIFECYCLE_CARDS: { key: "newC" | "active" | "atRisk" | "inactive"; label: Lifecycle; desc: string; icon: typeof Users; iconClass: string; valueClass: string; accent: string }[] = [
+  { key: "newC", label: "New", desc: "Joined ≤ 7 days ago", icon: UserPlus, iconClass: "border-emerald-500/30 text-emerald-600 bg-emerald-500/10", valueClass: "text-emerald-600", accent: "bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-transparent" },
+  { key: "active", label: "Active", desc: "Applied ≤ 30 days ago", icon: Users, iconClass: "border-blue-500/30 text-blue-600 bg-blue-500/10", valueClass: "text-blue-600", accent: "bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/30 dark:to-transparent" },
+  { key: "atRisk", label: "At Risk", desc: "Last applied 31–90 days", icon: AlertTriangle, iconClass: "border-amber-500/30 text-amber-500 bg-amber-500/10", valueClass: "text-amber-600", accent: "bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-transparent" },
+  { key: "inactive", label: "Inactive", desc: "Applied > 90 days or never", icon: PauseCircle, iconClass: "border-rose-500/30 text-rose-500 bg-rose-500/10", valueClass: "text-rose-600", accent: "bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/30 dark:to-transparent" },
 ];
 
 
-function KpiTile({ label, value, description, Icon, iconClass, valueClass }: { label: string; value: string; description: string; Icon: typeof Users; iconClass?: string; valueClass?: string }) {
+function KpiTile({ label, value, description, Icon, cardClass, iconClass, valueClass }: { label: string; value: string; description: string; Icon: typeof Users; cardClass?: string; iconClass?: string; valueClass?: string }) {
   return (
-    <div className="rounded-xl border bg-card p-5">
+    <div className={cn("rounded-xl border p-5 bg-card", cardClass)}>
       <div className="flex items-start gap-3">
         <div className={cn("h-9 w-9 rounded-lg border bg-muted/40 flex items-center justify-center text-muted-foreground", iconClass)}><Icon className="h-4 w-4" /></div>
         <div className="text-sm font-medium leading-tight">{label}</div>
       </div>
-      <div className={cn("mt-4 text-3xl font-semibold tracking-tight tabular-nums", valueClass)}>{value}</div>
+      <div className={cn("mt-4 text-4xl font-semibold tracking-tight tabular-nums", valueClass)}>{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{description}</div>
     </div>
   );
