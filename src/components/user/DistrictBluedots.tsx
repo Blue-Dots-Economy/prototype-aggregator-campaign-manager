@@ -1,7 +1,8 @@
 import { Fragment, useMemo, useState } from "react";
 import {
-  Users, UserPlus, Building2, Layers, Send, Sparkles, AlertTriangle, PauseCircle,
-  RefreshCw, Copy, CheckCircle2, TrendingUp, Activity, ChevronRight, ChevronDown,
+  Users, UserPlus, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
+  RefreshCw, TrendingUp, Activity, ChevronRight, ChevronDown,
+
   ArrowUpDown, TrendingDown, Minus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -215,25 +216,16 @@ export function DistrictBluedots({ district }: { district: string }) {
         </div>
       </div>
 
-      {/* PROFILES + USERS metric groups */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Profiles</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <MetricTile label="Profiles Registered" value={fmtN(realTotal)} caption="All seeker records" Icon={Copy} />
-            <MetricTile label="Profiles Complete" value={fmtN(realTotal)} caption="100% of all profiles" Icon={CheckCircle2} />
-            <MetricTile label="Applied for Jobs" value={fmtN(t.applied)} caption={`${pctOf(t.applied, realTotal)}% with submissions`} Icon={Send} />
-          </div>
-        </div>
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Users</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <MetricTile label="Total Job Seekers" value={fmtN(users)} caption="Unique account holders" Icon={Users} />
-            <MetricTile label="Avg Profiles / User" value={(realTotal / users).toFixed(1)} caption="Profiles managed each" Icon={TrendingUp} />
-            <MetricTile label="Avg Actions / User" value={(t.applied / users).toFixed(1)} caption="Recorded interactions" Icon={Activity} />
-          </div>
+      {/* USERS metric group */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Users</div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <MetricTile label="Total Job Seekers" value={fmtN(users)} caption="Unique account holders" Icon={Users} />
+          <MetricTile label="Avg Profiles / User" value={(realTotal / users).toFixed(1)} caption="Profiles managed each" Icon={TrendingUp} />
+          <MetricTile label="Avg Actions / User" value={(t.applied / users).toFixed(1)} caption="Recorded interactions" Icon={Activity} />
         </div>
       </div>
+
 
       {/* Organisation → coordinator rollup (district-specific) */}
       <div>
