@@ -44,6 +44,7 @@ function fmtDate(v: string | null, withYear: boolean) {
 }
 const fmt1 = (n: number | null) => (n === null ? "—" : n.toFixed(1));
 const fmtN = (n: number) => n.toLocaleString("en-IN");
+const CAP = 500;
 
 function MyBlueDotsPage() {
   const { session, hydrated } = useAuth();
@@ -88,6 +89,9 @@ function MyBlueDotsPage() {
       return x < y ? -m : x > y ? m : 0;
     });
   }, [data, search, kind, sort]);
+
+  const visible = filtered.slice(0, CAP);
+
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
@@ -218,7 +222,7 @@ function MyBlueDotsPage() {
                     </tr>
                   </thead>
                   <tbody className="tabular-nums">
-                    {filtered.map((d) => (
+                    {visible.map((d) => (
                       <tr key={`${d.kind}-${d.id}`} className="border-b last:border-0 hover:bg-muted/40">
                         <td className="px-3 py-2">
                           <div className="font-medium text-foreground">{d.name}</div>
@@ -240,6 +244,11 @@ function MyBlueDotsPage() {
                   </tbody>
                 </table>
               </div>
+              {filtered.length > CAP && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Showing first {fmtN(CAP)} of {filtered.length.toLocaleString("en-IN")} — refine your search to narrow the list.
+                </p>
+              )}
             </Panel>
           )}
         </>
