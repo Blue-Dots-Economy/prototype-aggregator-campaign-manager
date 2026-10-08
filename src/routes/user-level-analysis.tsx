@@ -74,6 +74,8 @@ import {
   type Seeker,
   type CsvMeta,
 } from "@/lib/upSeekersCsv";
+import { useAuth } from "@/auth/context";
+import { DistrictBluedots } from "@/components/user/DistrictBluedots";
 
 export const Route = createFileRoute("/user-level-analysis")({
   component: UserLevelAnalysis,
@@ -122,6 +124,14 @@ function MetricTile({
 }
 
 function UserLevelAnalysis() {
+  const { session } = useAuth();
+  if (session?.role === "jfc" && session.district) {
+    return <DistrictBluedots district={session.district} />;
+  }
+  return <CsvBluedots />;
+}
+
+function CsvBluedots() {
   const initial = useMemo(() => loadSeekers(), []);
   const [seekers, setSeekers] = useState<Seeker[]>(initial.seekers);
   const [meta, setMeta] = useState<CsvMeta>(initial.meta);
