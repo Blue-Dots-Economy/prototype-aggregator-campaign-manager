@@ -1,7 +1,8 @@
 import { Fragment, useMemo, useState } from "react";
 import {
-  Users, UserPlus, Building2, Layers, Send, Sparkles, AlertTriangle, PauseCircle,
-  RefreshCw, Copy, CheckCircle2, TrendingUp, Activity, ChevronRight, ChevronDown,
+  Users, UserPlus, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
+  RefreshCw, TrendingUp, Activity, ChevronRight, ChevronDown,
+
   ArrowUpDown, TrendingDown, Minus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
