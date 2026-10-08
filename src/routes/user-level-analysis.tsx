@@ -130,6 +130,9 @@ function UserLevelAnalysis() {
   if (session?.role === "owner" && session.district) {
     return <AggregatorBluedots orgName={session.nodeName ?? "Your organisation"} district={session.district} />;
   }
+  if (session?.role === "coordinator" && session.district) {
+    return <CoordinatorBluedots coordName={session.nodeName ?? "My list"} district={session.district} />;
+  }
   if (session?.role === "jfc" && session.district) {
     return <DistrictBluedots district={session.district} />;
   }
