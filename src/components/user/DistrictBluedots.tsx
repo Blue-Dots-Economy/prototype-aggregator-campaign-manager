@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 const REAL_TOTAL: Record<string, number> = { UP: 18772, KA: 28961 };
+const PROVIDER_TOTAL: Record<string, number> = { UP: 819, KA: 1142 };
 const AGG_NAMES: Record<string, string[]> = {
   UP: ["Ghaziabad Skills Mission", "Modinagar Livelihoods Trust", "Loni Rozgar Kendra", "Muradnagar Collective", "Dasna Udyog Samiti", "Pilkhuwa Skill Centre"],
   KA: ["Deshpande Foundation", "Hubli Skill Mission", "Dharwad Livelihoods Trust", "Navalgund Collective", "Kundgol Udyog Kendra", "Kalghatgi Rozgar Samiti"],
@@ -108,7 +109,11 @@ type SortKey = "activity" | "dots" | "new7d";
 
 export function DistrictBluedots({ district }: { district: string }) {
   const instance = INSTANCE[district] ?? "UP";
-  const realTotal = REAL_TOTAL[instance] ?? 0;
+  const [view, setView] = useState<"all" | "seeker" | "provider">("all");
+  const seekerTotal = REAL_TOTAL[instance] ?? 0;
+  const providerTotal = PROVIDER_TOTAL[instance] ?? 0;
+  const realTotal = view === "seeker" ? seekerTotal : view === "provider" ? providerTotal : seekerTotal + providerTotal;
+  const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";
   const aggs = useMemo(() => genHierarchy(instance, realTotal), [instance, realTotal]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [drill, setDrill] = useState<Node | null>(null);
@@ -189,6 +194,14 @@ export function DistrictBluedots({ district }: { district: string }) {
           <p className="mt-1 text-sm text-muted-foreground">Track every participant across your district — at a glance.</p>
         </div>
         <div className="flex items-center gap-2">
+          <div role="group" aria-label="Participant type" className="inline-flex rounded-lg bg-muted p-1">
+            {(["all", "seeker", "provider"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
+                className={cn("rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors", view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                {v}
+              </button>
+            ))}
+          </div>
           <Select value={period} onValueChange={setPeriod}><SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="7">This week</SelectItem><SelectItem value="30">Last 30 days</SelectItem><SelectItem value="90">Last 90 days</SelectItem></SelectContent></Select>
           <Button className="gap-2"><UserPlus className="h-4 w-4" /> Add Participants</Button>
         </div>
@@ -200,7 +213,7 @@ export function DistrictBluedots({ district }: { district: string }) {
       {/* SEEKERS summary strip */}
       <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4">
         <div className="h-11 w-11 rounded-lg bg-brand-soft text-brand flex items-center justify-center"><Users className="h-5 w-5" /></div>
-        <div><div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Seekers</div><div className="text-xl font-bold tabular-nums">{fmtN(realTotal)} total</div></div>
+        <div><div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{typeLabel}</div><div className="text-xl font-bold tabular-nums">{fmtN(realTotal)} total</div></div>
         <div className="hidden sm:block h-9 w-px bg-border mx-1" />
         <div className="text-sm text-muted-foreground">Lifecycle and profile health across {district}.</div>
         <Button variant="outline" size="sm" className="ml-auto gap-2"><RefreshCw className="h-4 w-4" /> Refresh</Button>

@@ -161,6 +161,7 @@ export function Sidebar() {
   })).filter((g) => g.items.length > 0);
   const showSettings = canAccess(role, SETTINGS.to);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const programLocked = pathname === "/user-level-analysis";
 
   const listFn = useServerFn(listConnections);
   const { data: conns } = useQuery({
@@ -203,19 +204,22 @@ export function Sidebar() {
         <div
           role="group"
           aria-label="Select program"
+          title={programLocked ? "Program filter doesn't apply on My Bluedots" : undefined}
           className="mt-5 inline-flex rounded-lg bg-sidebar-accent p-1 w-full"
         >
           {(["kkb", "dkb"] as const).map((id) => (
             <button
               key={id}
               onClick={() => setProgramId(id)}
+              disabled={programLocked}
               aria-pressed={programId === id}
               aria-label={`Show ${id.toUpperCase()} program`}
               className={cn(
                 "flex-1 text-xs font-medium py-1.5 rounded-md uppercase tracking-wide transition-colors",
                 programId === id
                   ? "bg-white text-sidebar"
-                  : "text-sidebar-foreground/80 hover:text-sidebar-foreground"
+                  : "text-sidebar-foreground/80 hover:text-sidebar-foreground",
+                programLocked && "opacity-40 cursor-not-allowed pointer-events-none"
               )}
             >
               {id}
