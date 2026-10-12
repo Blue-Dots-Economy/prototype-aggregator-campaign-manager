@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Ecosystem (Blue Dots) project, `bluedot` schema. Server-only.
-function ecoClient(): SupabaseClient | null {
+function ecoClient(): SupabaseClient<any, any, any> | null {
   const url = process.env.ECO_SUPABASE_URL;
   const key = process.env.ECO_SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
@@ -20,7 +20,7 @@ const SEEKERS_PER_ORG = 200;
 
 // Keyset pagination: order by a unique key, continue from the last key actually returned.
 async function readAll<T extends Record<string, unknown>>(
-  sb: SupabaseClient, table: string, cols: string, key: string, instance: string,
+  sb: SupabaseClient<any, any, any>, table: string, cols: string, key: string, instance: string,
   extra?: (q: any) => any,
 ): Promise<T[]> {
   const out: T[] = [];
