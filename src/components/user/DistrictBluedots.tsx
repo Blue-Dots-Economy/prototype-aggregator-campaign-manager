@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { fetchDistrictRollup, type RollupOrg, type RollupSeeker } from "@/lib/rollup.functions";
+import { fetchDistrictRollup, statsFor, type RollupOrg, type RollupMember } from "@/lib/rollup.functions";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
@@ -33,7 +33,7 @@ const fmtN = (n: number) => n.toLocaleString("en-IN");
 const pctOf = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-interface Node { id: string; name: string; dots: number; new7d: number; active: number; inactive: number; applied: number; activity: number; trend: number; quiet: boolean; atRisk?: number; seekers?: RollupSeeker[]; }
+interface Node { id: string; name: string; dots: number; new7d: number; active: number; inactive: number; applied: number; activity: number; trend: number; quiet: boolean; atRisk?: number; members?: RollupMember[]; }
 interface AggNode extends Node { coordinators: Node[]; }
 
 function makeCoord(instance: string, idx: number, dots: number): Node {
@@ -66,15 +66,15 @@ function genHierarchy(instance: string, realTotal: number): AggNode[] {
   });
 }
 
-function liveHierarchy(instance: string, orgs: RollupOrg[]): AggNode[] {
+function liveHierarchy(instance: string, orgs: RollupOrg[], view: "all" | "seeker" | "provider"): AggNode[] {
   let ci = 0;
-  return orgs.map((o) => {
+  return orgs.map((org) => ({ org, o: statsFor(org, view) })).filter((x) => x.o.dots > 0).map(({ org, o }) => {
     const dots = Math.max(1, o.dots);
     const cCount = Math.max(1, Math.min(6, Math.round(o.dots / 400) || 1));
     const coordinators = splitInto(o.dots, cCount, Math.max(1, Math.floor(o.dots / (cCount * 4)))).map((d) => makeCoord(instance, ci++, Math.max(1, d)));
     const activity = clamp(Math.round((o.active / dots / 0.15) * 55 + (o.new7d / dots / 0.045) * 35 + 6), 6, 100);
     const trend = Math.round(coordinators.reduce((a, c) => a + c.trend * c.dots, 0) / (coordinators.reduce((a, c) => a + c.dots, 0) || 1));
-    return { id: o.id, name: o.name, dots: o.dots, new7d: o.new7d, active: o.active, inactive: o.inactive, atRisk: o.atRisk, applied: o.applied, activity, trend, quiet: o.new7d === 0, coordinators, seekers: o.seekers };
+    return { id: org.id, name: org.name, dots: o.dots, new7d: o.new7d, active: o.active, inactive: o.inactive, atRisk: o.atRisk, applied: o.applied, activity, trend, quiet: o.new7d === 0, coordinators, members: view === "all" ? org.members : org.members.filter((m) => m.kind === view) };
   });
 }
 const fmtDate = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
@@ -131,8 +131,8 @@ export function DistrictBluedots({ district }: { district: string }) {
   const rollupFn = useServerFn(fetchDistrictRollup);
   const liveQ = useQuery({ queryKey: ["district-rollup", instance], queryFn: () => rollupFn({ data: { instance } }), staleTime: 5 * 60_000 });
   const live = liveQ.data && liveQ.data.available ? liveQ.data : null;
-  const liveOn = !!live && view !== "provider";
-  const liveAggs = useMemo(() => (live ? liveHierarchy(instance, live.orgs) : []), [live, instance]);
+  const liveOn = !!live;
+  const liveAggs = useMemo(() => (live ? liveHierarchy(instance, live.orgs, view) : []), [live, instance, view]);
   const sampleAggs = useMemo(() => genHierarchy(instance, realTotal), [instance, realTotal]);
   const aggs = liveOn ? liveAggs : sampleAggs;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -168,7 +168,7 @@ export function DistrictBluedots({ district }: { district: string }) {
   const toggleSort = (k: SortKey) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "desc" }));
   const drillRows = useMemo<Indiv[]>(() => {
     if (!drill) return [];
-    if (drill.seekers) return drill.seekers.map((s, i) => ({ id: s.id, color: AV[i % AV.length], joined: fmtDate(s.joined), lastSeen: "", role: "—", education: "", applications: s.applications, lifecycle: s.lifecycle, completion: 0, city: "" }));
+    if (drill.members) return drill.members.map((s, i) => ({ id: s.id, color: AV[i % AV.length], joined: fmtDate(s.joined), lastSeen: "", role: s.kind === "provider" ? `Provider · ${s.livePostings} live posting${s.livePostings === 1 ? "" : "s"}` : "Seeker", education: "", applications: s.applications, lifecycle: s.lifecycle, completion: 0, city: "" }));
     return genIndividuals(instance, Math.min(drill.dots, 60));
   }, [drill, instance]);
 
@@ -196,7 +196,7 @@ export function DistrictBluedots({ district }: { district: string }) {
     <tr className={cn("border-t cursor-pointer", kind === "coord" ? "bg-muted/20 hover:bg-muted/40" : "hover:bg-muted/30")} onClick={() => (kind === "agg" ? toggle(n.id) : setDrill(n))}>
       <td className="px-3 py-2.5">
         {kind === "agg" ? (
-          <span className="flex items-center gap-2 font-medium">{expanded.has(n.id) ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}<Building2 className="h-4 w-4 text-brand" />{n.seekers ? <span className="font-mono text-xs truncate max-w-[260px]" title={n.name}>{n.name}</span> : n.name}{n.seekers && <button type="button" onClick={(e) => { e.stopPropagation(); setDrill(n); }} className="text-[11px] font-normal text-muted-foreground underline decoration-dotted hover:text-foreground">dots</button>}</span>
+          <span className="flex items-center gap-2 font-medium">{expanded.has(n.id) ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}<Building2 className="h-4 w-4 text-brand" />{n.members ? <span className="font-mono text-xs truncate max-w-[260px]" title={n.name}>{n.name}</span> : n.name}{n.members && <button type="button" onClick={(e) => { e.stopPropagation(); setDrill(n); }} className="text-[11px] font-normal text-muted-foreground underline decoration-dotted hover:text-foreground">dots</button>}</span>
         ) : (
           <span className="flex items-center gap-2 pl-6"><span className="h-1.5 w-1.5 rounded-full bg-brand/60" /><span className={cn(n.quiet ? "text-amber-600 dark:text-amber-400 font-medium" : "text-foreground")}>{n.name}</span>{n.quiet && <span className="text-[11px] text-amber-600 dark:text-amber-400">· 0 new</span>}<span className="text-[11px] text-muted-foreground underline decoration-dotted">dots</span></span>
         )}
@@ -233,7 +233,7 @@ export function DistrictBluedots({ district }: { district: string }) {
       </div>
 
       {/* Preview banner */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /><p className="text-amber-800 dark:text-amber-300"><span className="font-medium">Preview.</span> {liveOn ? <>Organisation rows, totals and lifecycle are live ({fmtN(realTotal)} seekers); the coordinator split, trends and activity are still sample.</> : <>Totals use the live count ({fmtN(realTotal)}); the organisation / coordinator split, trends and activity are sample until the Blue Dots database is connected.</>}</p></div>
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /><p className="text-amber-800 dark:text-amber-300"><span className="font-medium">Preview.</span> {liveOn ? <>Organisation rows, totals and lifecycle are live ({fmtN(realTotal)} {typeLabel.toLowerCase()}{view !== "seeker" && live ? ` · ${fmtN(live.orgs.reduce((a, o) => a + o.livePostings, 0))} live job postings` : ""}); the coordinator split, trends and activity are still sample.</> : <>Totals use the live count ({fmtN(realTotal)}); the organisation / coordinator split, trends and activity are sample until the Blue Dots database is connected.</>}</p></div>
 
       {/* SEEKERS summary strip */}
       <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4">
@@ -320,7 +320,7 @@ export function DistrictBluedots({ district }: { district: string }) {
       {/* Coordinator drill-down — Agg DPG participant table style */}
       <Dialog open={!!drill} onOpenChange={(o) => !o && setDrill(null)}>
         <DialogContent className="max-w-4xl">
-          <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · ${drill.seekers ? `live, first ${fmtN(drill.seekers.length)}` : `sample of ${fmtN(Math.min(drill.dots, 60))}`}` : ""}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · ${drill.members ? `live, first ${fmtN(drill.members.length)}` : `sample of ${fmtN(Math.min(drill.dots, 60))}`}` : ""}</DialogDescription></DialogHeader>
           <div className="max-h-[500px] overflow-auto rounded-lg border">
             <table className="w-full min-w-[720px] text-sm">
               <thead className="sticky top-0 bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">Participant</th><th className="px-4 py-2.5 font-medium">Joined</th><th className="px-4 py-2.5 font-medium">Profile status</th><th className="px-4 py-2.5 font-medium">Role wanted</th><th className="px-4 py-2.5 text-right font-medium">Apps</th><th className="px-4 py-2.5 font-medium">Lifecycle</th></tr></thead>
