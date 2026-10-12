@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { fetchDistrictRollup, statsFor, isOrgId } from "@/lib/rollup.functions";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 // Sample totals for a single aggregator org (one org, not the whole district).
@@ -92,7 +95,12 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
   const [view, setView] = useState<"all" | "seeker" | "provider">("all");
   const seekerTotal = ORG_SEEKER_TOTAL[instance] ?? 0;
   const providerTotal = ORG_PROVIDER_TOTAL[instance] ?? 0;
-  const realTotal = view === "seeker" ? seekerTotal : view === "provider" ? providerTotal : seekerTotal + providerTotal;
+  const rollupFn = useServerFn(fetchDistrictRollup);
+  const orgIdOk = isOrgId(orgName);
+  const liveQ = useQuery({ queryKey: ["org-rollup", instance, orgName], enabled: orgIdOk, queryFn: () => rollupFn({ data: { instance, aggregatorId: orgName } }), staleTime: 5 * 60_000 });
+  const liveOrg = liveQ.data && liveQ.data.available ? liveQ.data.orgs.find((o) => o.id === orgName) ?? null : null;
+  const liveStats = liveOrg ? statsFor(liveOrg, view) : null;
+  const realTotal = liveStats ? liveStats.dots : view === "seeker" ? seekerTotal : view === "provider" ? providerTotal : seekerTotal + providerTotal;
   const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";
 
   const coords = useMemo(() => genCoordinators(instance, realTotal), [instance, realTotal]);
@@ -105,8 +113,8 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
     for (const c of coords) { o.new7d += c.new7d; o.active += c.active; o.inactive += c.inactive; o.applied += c.applied; }
     return o;
   }, [coords]);
-  const atRisk = Math.max(0, realTotal - t.new7d - t.active - t.inactive);
-  const lcVal: Record<string, number> = { new7d: t.new7d, active: t.active, atRiskN: atRisk, inactive: t.inactive };
+  const atRisk = liveStats ? liveStats.atRisk : Math.max(0, realTotal - t.new7d - t.active - t.inactive);
+  const lcVal: Record<string, number> = liveStats ? { new7d: liveStats.new7d, active: liveStats.active, atRiskN: liveStats.atRisk, inactive: liveStats.inactive } : { new7d: t.new7d, active: t.active, atRiskN: atRisk, inactive: t.inactive };
 
   const attention = useMemo(() => {
     const quiet = coords.filter((c) => c.quiet);
@@ -145,7 +153,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{orgName} · {instance}</Badge></div>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{orgIdOk ? <span className="font-mono text-xs" title={orgName}>{orgName.slice(0, 12)}…</span> : orgName} · {instance}</Badge></div>
           <p className="mt-1 text-sm text-muted-foreground">Track every participant in your network — at a glance.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -161,7 +169,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       </div>
 
       {/* Preview banner */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /><p className="text-amber-800 dark:text-amber-300"><span className="font-medium">Preview.</span> All figures are sample data until the Blue Dots database is connected.</p></div>
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /><p className="text-amber-800 dark:text-amber-300"><span className="font-medium">Preview.</span> {liveStats ? <>Totals and lifecycle are live ({fmtN(realTotal)} {typeLabel.toLowerCase()}{view !== "seeker" && liveOrg ? ` · ${fmtN(liveOrg.livePostings)} live job postings` : ""}); the coordinator split, trends and activity are still sample.</> : <>All figures are sample data until the Blue Dots database is connected.</>}</p></div>
 
       {/* Participants summary strip */}
       <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4">
