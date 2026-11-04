@@ -153,7 +153,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{orgIdOk ? <span className="font-mono text-xs" title={orgName}>{orgName.slice(0, 12)}…</span> : orgName} · {instance}</Badge></div>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{orgIdOk ? (liveOrg && liveOrg.name !== liveOrg.id ? <span title={orgName}>{liveOrg.name}</span> : <span className="font-mono text-xs" title={orgName}>{orgName.slice(0, 12)}…</span>) : orgName} · {instance}</Badge></div>
           <p className="mt-1 text-sm text-muted-foreground">Track every participant in your network — at a glance.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -176,7 +176,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
         <div className="h-11 w-11 rounded-lg bg-brand-soft text-brand flex items-center justify-center"><Users className="h-5 w-5" /></div>
         <div><div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{typeLabel}</div><div className="text-xl font-bold tabular-nums">{fmtN(realTotal)} total</div></div>
         <div className="hidden sm:block h-9 w-px bg-border mx-1" />
-        <div className="text-sm text-muted-foreground">Lifecycle and profile health across {orgName}.</div>
+        <div className="text-sm text-muted-foreground">Lifecycle and profile health across {liveOrg && liveOrg.name !== liveOrg.id ? liveOrg.name : orgName}.</div>
         <Button variant="outline" size="sm" className="ml-auto gap-2"><RefreshCw className="h-4 w-4" /> Refresh</Button>
       </div>
 
