@@ -1,7 +1,7 @@
 # Roadmap
 
-- [ ] Verify live Blue Dots hierarchy and replace all three persona samples.
-- [ ] Test hierarchy/lifecycle rules and verify district/owner drill-downs; delete temporary accounts.
+- [x] Verify live Blue Dots hierarchy and replace all three persona samples.
+- [x] Test hierarchy/lifecycle rules and verify district/owner drill-downs; delete temporary accounts.
 
 - [x] Sapijodzi donation flow: `/donera` form, Zeffy prefill handoff, webhook, CSV to Agnes, DB tables
 - [x] ATLAS urgency score: `atlas_cohort_members` migration + optional urgency in
