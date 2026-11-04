@@ -57,6 +57,19 @@ export async function loadDistrictRollup(instance: string, aggregatorId?: string
         sb, "bluedot_items", "item_id,created_by", "item_id", instance, (q) => q.eq("item_type", "job_posting_1.0").eq("lifecycle_status", "live")),
     ]);
     if (!users.length) return { available: false };
+    // Real org names: bluedot_aggregators.coordinator_org_id (the org's seeker/provider arm) = onboarded_by_org_id.
+    const names = new Map<string, string>();
+    try {
+      const { data: aggs } = await sb.from("bluedot_aggregators").select("coordinator_org_id,org_name,coordinator_type,test_flag").eq("instance", instance).limit(5000);
+      const rows = ((aggs ?? []) as { coordinator_org_id: string | null; org_name: string | null; coordinator_type: string | null; test_flag: boolean | null }[])
+        .filter((r) => r.coordinator_org_id && r.org_name && !r.test_flag && !/test_marker/i.test(r.org_name));
+      const dup = new Map<string, number>();
+      for (const r of rows) dup.set(r.org_name!.trim(), (dup.get(r.org_name!.trim()) ?? 0) + 1);
+      for (const r of rows) {
+        const n = r.org_name!.trim();
+        names.set(r.coordinator_org_id!, (dup.get(n) ?? 0) > 1 && r.coordinator_type ? `${n} (${r.coordinator_type.replace("_", " ")})` : n);
+      }
+    } catch (e) { console.error("[rollup] org names unavailable", e); }
 
     const lastApply = new Map<string, number>();
     const applyCount = new Map<string, number>();
@@ -78,7 +91,7 @@ export async function loadDistrictRollup(instance: string, aggregatorId?: string
       if (!isSeeker && !isProvider) continue;
       const orgId = u.onboarded_by_org_id || "unattributed";
       let o = orgs.get(orgId);
-      if (!o) { o = { id: orgId, name: orgId, seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [], sCount: 0, pCount: 0 }; orgs.set(orgId, o); }
+      if (!o) { o = { id: orgId, name: names.get(orgId) ?? orgId, seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [], sCount: 0, pCount: 0 }; orgs.set(orgId, o); }
       const created = Date.parse(u.created_at);
       const isNew = Number.isFinite(created) && now - created <= 7 * DAY;
 
