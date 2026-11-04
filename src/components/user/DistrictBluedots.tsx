@@ -114,6 +114,7 @@ export function DistrictBluedots({ district }: { district: string }) {
 
   if (liveQ.loading) return <LiveState loading retry={liveQ.retry} />;
   if (!liveQ.available || liveQ.isError) return <LiveState loading={false} retry={liveQ.retry} />;
+  if (!aggs.length) return <LiveState loading={false} retry={liveQ.retry} empty="No Blue Dots data for this district yet" />;
   return (
     <div className="space-y-6">
       {/* Header */}
