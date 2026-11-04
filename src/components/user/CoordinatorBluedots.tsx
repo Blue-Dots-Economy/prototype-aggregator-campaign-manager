@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  Users, UserPlus, Sparkles, AlertTriangle, PauseCircle, RefreshCw, Search, User, UserX, FileWarning, SendHorizonal,
+  Users, Sparkles, AlertTriangle, PauseCircle, RefreshCw, Search, UserX, SendHorizonal,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,19 +10,13 @@ import { useLiveRollup, nodeFor, LiveState, MemberTable } from "./live-rollup";
 import { cn } from "@/lib/utils";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
-const AV = ["bg-amber-500", "bg-rose-500", "bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-cyan-600", "bg-fuchsia-500", "bg-indigo-500"];
+const AV = ["bg-muted text-muted-foreground"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CAP = 500;
 
 const fmtN = (n: number) => n.toLocaleString("en-IN");
 const pctOf = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
 
-const LC_BADGE: Record<string, string> = {
-  New: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  Active: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  "At Risk": "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
-};
 const LIFECYCLE: { key: string; label: string; desc: string; icon: typeof Users; tint: string; icon_c: string; num_c: string }[] = [
   { key: "New", label: "New", desc: "Joined within the last 7 days", icon: Sparkles, tint: "from-emerald-50 to-card dark:from-emerald-950/20 dark:to-card", icon_c: "text-emerald-600 dark:text-emerald-400", num_c: "text-emerald-600 dark:text-emerald-400" },
   { key: "Active", label: "Active", desc: "Applied to a job in the last 30 days", icon: Users, tint: "from-blue-50 to-card dark:from-blue-950/20 dark:to-card", icon_c: "text-blue-600 dark:text-blue-400", num_c: "text-blue-600 dark:text-blue-400" },
@@ -68,7 +62,6 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{arm?.typeLabel ?? "Unit"} · {instance}</Badge></div>
-          <p className="mt-1 text-sm text-muted-foreground"></p>
         </div>
         <div className="flex items-center gap-2">
           <div role="group" aria-label="Participant type" className="inline-flex rounded-lg bg-muted p-1">
@@ -124,7 +117,7 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
           <Select value={lcFilter} onValueChange={setLcFilter}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Status: All</SelectItem><SelectItem value="New">New</SelectItem><SelectItem value="Active">Active</SelectItem><SelectItem value="At Risk">At Risk</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select>
           <div className="text-xs text-muted-foreground whitespace-nowrap">{fmtN(filtered.length)} loaded · {fmtN(realTotal)} total</div>
         </div>
-        <MemberTable members={visible} />
+        <MemberTable members={visible} avatarClasses={AV} months={MONTHS} />
         {filtered.length > CAP && (<div className="p-3 text-center text-xs text-muted-foreground border-t">Showing first {fmtN(CAP)} of {fmtN(filtered.length)} — refine with search or filter.</div>)}
       </div>
     </div>

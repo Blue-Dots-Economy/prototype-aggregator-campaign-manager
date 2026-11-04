@@ -1,32 +1,24 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  Users, UserPlus, User, Layers, Sparkles, AlertTriangle, PauseCircle, RefreshCw,
+  Users, Layers, Sparkles, AlertTriangle, PauseCircle, RefreshCw,
   TrendingDown, Info, ArrowUpDown, Send,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLiveRollup, nodeFor, LiveState, MemberTable, type LiveNode } from "./live-rollup";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
-const AV = ["bg-amber-500", "bg-rose-500", "bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-cyan-600", "bg-fuchsia-500", "bg-indigo-500"];
+const AV = ["bg-muted text-muted-foreground"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const fmtN = (n: number) => n.toLocaleString("en-IN");
 const pctOf = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
 
 type Coord = LiveNode;
-const LC_BADGE: Record<string, string> = {
-  New: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  Active: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  "At Risk": "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
-};
-const actColor = (a: number) => (a >= 60 ? "bg-emerald-500" : a >= 40 ? "bg-amber-500" : "bg-rose-500");
 const LIFECYCLE: { key: "new7d" | "active" | "atRiskN" | "inactive"; label: string; desc: string; icon: typeof Users; tint: string; icon_c: string; num_c: string }[] = [
   { key: "new7d", label: "New", desc: "Joined within the last 7 days", icon: Sparkles, tint: "from-emerald-50 to-card dark:from-emerald-950/20 dark:to-card", icon_c: "text-emerald-600 dark:text-emerald-400", num_c: "text-emerald-600 dark:text-emerald-400" },
   { key: "active", label: "Active", desc: "Applied to a job in the last 30 days", icon: Users, tint: "from-blue-50 to-card dark:from-blue-950/20 dark:to-card", icon_c: "text-blue-600 dark:text-blue-400", num_c: "text-blue-600 dark:text-blue-400" },
@@ -51,7 +43,6 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
   const liveOrg = liveQ.orgs[0] ?? null;
   const liveStats = liveOrg ? nodeFor(liveOrg, view) : null;
   const realTotal = liveStats?.dots ?? 0;
-  const orgIdOk = true;
   const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";
   const coords = useMemo(() => liveOrg?.coordinators.map(c => nodeFor(c, view)) ?? [], [liveOrg, view]);
   const [drill, setDrill] = useState<Coord | null>(null);
@@ -101,8 +92,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{orgIdOk ? (liveOrg && liveOrg.name !== liveOrg.id ? <span title={orgName}>{liveOrg.name}</span> : <span className="font-mono text-xs" title={orgName}>{orgName.slice(0, 12)}…</span>) : orgName} · {instance}</Badge></div>
-          <p className="mt-1 text-sm text-muted-foreground"></p>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand"><span className="break-all" title={liveOrg.id}>{liveOrg.name}</span> · {instance}</Badge></div>
         </div>
         <div className="flex items-center gap-2">
           <div role="group" aria-label="Participant type" className="inline-flex rounded-lg bg-muted p-1">
@@ -113,6 +103,8 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
           </div>
         </div>
       </div>
+
+      {liveOrg.name === liveOrg.id && <p className="text-xs text-muted-foreground">Orgs without a registered name shown by org id.</p>}
 
       {/* Participants summary strip */}
       <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4">
@@ -162,7 +154,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">By coordinator</div>
-          <div className="text-xs text-muted-foreground">{coords.length} coordinators · </div>
+          <div className="text-xs text-muted-foreground">{coords.length} coordinators</div>
         </div>
         <div className="rounded-xl border bg-card overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
@@ -208,7 +200,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       <Dialog open={!!drill} onOpenChange={(o) => !o && setDrill(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · showing ${fmtN(drill.members.length)} real participants` : ""}</DialogDescription></DialogHeader>
-          <MemberTable members={drill?.members ?? []} />
+          <MemberTable members={drill?.members ?? []} avatarClasses={AV} months={MONTHS} />
         </DialogContent>
       </Dialog>
     </div>
