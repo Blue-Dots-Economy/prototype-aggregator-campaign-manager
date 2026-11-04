@@ -11,5 +11,7 @@
 
 ## Rules
 
+- My Blue Dots shares a pure hierarchy/lifecycle model and live paginated reader across the three personas; this keeps arm attribution consistent and server responses bounded.
+
 - Server functions must never return whole tables: responses are bounded by a framework size cap, so large lists are read in slices and stitched together client-side (see `fetchReviewCalls` + `useReviewCalls`). Keep slice steps derived from rows actually returned, because the database may hand back fewer rows than asked.
 - Review-list reads must not select the heavy `data` jsonb column; only single-call detail fetches may (detoasting transcripts is what made the list time out).

@@ -80,6 +80,14 @@ import { AggregatorBluedots } from "@/components/user/AggregatorBluedots";
 import { CoordinatorBluedots } from "@/components/user/CoordinatorBluedots";
 
 export const Route = createFileRoute("/user-level-analysis")({
+  head: () => ({ meta: [
+    { title: "My Blue Dots | Blue Dots Dashboard" },
+    { name: "description", content: "Live Blue Dots organisation, coordinator unit, and participant lifecycle analysis." },
+    { property: "og:title", content: "My Blue Dots | Blue Dots Dashboard" },
+    { property: "og:description", content: "Live organisation and coordinator unit rollups with participant lifecycle analysis." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: UserLevelAnalysis,
 });
 
