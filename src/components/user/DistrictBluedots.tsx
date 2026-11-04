@@ -1,108 +1,27 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import {
-  Users, UserPlus, User, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
-  RefreshCw, TrendingUp, ChevronRight, ChevronDown,
+  Users, Building2, Layers, Sparkles, AlertTriangle, PauseCircle,
+  RefreshCw, ChevronRight, ChevronDown,
 
-  ArrowUpDown, TrendingDown, Minus, Info,
+  ArrowUpDown, TrendingDown, Info,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLiveRollup, nodeFor, LiveState, MemberTable, type LiveNode } from "./live-rollup";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { fetchDistrictRollup, statsFor, type RollupOrg, type RollupMember } from "@/lib/rollup.functions";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
-const REAL_TOTAL: Record<string, number> = { UP: 18772, KA: 28961 };
-const PROVIDER_TOTAL: Record<string, number> = { UP: 819, KA: 1142 };
-const AGG_NAMES: Record<string, string[]> = {
-  UP: ["Ghaziabad Skills Mission", "Modinagar Livelihoods Trust", "Loni Rozgar Kendra", "Muradnagar Collective", "Dasna Udyog Samiti", "Pilkhuwa Skill Centre"],
-  KA: ["Deshpande Foundation", "Hubli Skill Mission", "Dharwad Livelihoods Trust", "Navalgund Collective", "Kundgol Udyog Kendra", "Kalghatgi Rozgar Samiti"],
-};
-const CITIES: Record<string, string[]> = { UP: ["Ghaziabad", "Modinagar", "Loni", "Muradnagar", "Dasna", "Pilkhuwa"], KA: ["Hubli", "Dharwad", "Kalghatgi", "Kundgol", "Navalgund", "Annigeri"] };
-const ROLES = ["Delivery Executive", "Data Entry Operator", "Electrician", "Sales Executive", "Security Guard", "Machine Operator", "Tailor", "Driver", "Telecaller", "Housekeeping"];
-const EDU = ["Below 10th", "10th Pass", "12th Pass", "ITI", "Diploma", "Graduate"];
-const AV = ["bg-amber-500", "bg-rose-500", "bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-cyan-600", "bg-fuchsia-500", "bg-indigo-500"];
+const AV = ["bg-muted text-muted-foreground"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const pick = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const fmtN = (n: number) => n.toLocaleString("en-IN");
 const pctOf = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-interface Node { id: string; name: string; dots: number; new7d: number; active: number; inactive: number; applied: number; activity: number; trend: number; quiet: boolean; atRisk?: number; members?: RollupMember[]; }
+type Node = LiveNode;
 interface AggNode extends Node { coordinators: Node[]; }
-
-function makeCoord(instance: string, idx: number, dots: number): Node {
-  const quiet = Math.random() < 0.12;
-  const new7d = quiet ? 0 : Math.round(dots * (0.005 + Math.random() * 0.04));
-  const active = Math.round(dots * (0.06 + Math.random() * 0.09));
-  const inactive = Math.round(dots * (0.6 + Math.random() * 0.22));
-  const applied = Math.round(dots * (0.45 + Math.random() * 0.2));
-  const activity = clamp(Math.round((active / dots / 0.15) * 55 + (new7d / dots / 0.045) * 35 + 6), 6, 100);
-  const trend = quiet ? -(2 + Math.floor(Math.random() * 7)) : Math.round(Math.random() * 16 - 8);
-  return { id: `${instance}-C${idx}`, name: `CRD-${instance}-${String(idx + 1).padStart(3, "0")}`, dots, new7d, active, inactive, applied, activity, trend, quiet };
-}
-function splitInto(total: number, parts: number, min: number): number[] {
-  const w = Array.from({ length: parts }, () => 0.5 + Math.random());
-  const ws = w.reduce((a, b) => a + b, 0); const out: number[] = []; let rem = total;
-  for (let i = 0; i < parts; i++) { const v = i === parts - 1 ? Math.max(min, rem) : Math.max(min, Math.round((total * w[i]) / ws)); out.push(v); rem -= v; }
-  return out;
-}
-function genHierarchy(instance: string, realTotal: number): AggNode[] {
-  const names = AGG_NAMES[instance] ?? AGG_NAMES.UP;
-  const aggCount = Math.min(names.length, 5 + Math.floor(Math.random() * 2));
-  let ci = 0;
-  return splitInto(realTotal, aggCount, Math.max(10, Math.floor(realTotal / (aggCount * 4)))).map((aggTotal, i) => {
-    const cCount = 2 + Math.floor(Math.random() * 5);
-    const coordinators = splitInto(aggTotal, cCount, Math.max(5, Math.floor(aggTotal / (cCount * 4)))).map((d) => makeCoord(instance, ci++, d));
-    const sum = (k: keyof Node) => coordinators.reduce((a, c) => a + (c[k] as number), 0);
-    const dots = sum("dots");
-    const wavg = (k: keyof Node) => Math.round(coordinators.reduce((a, c) => a + (c[k] as number) * c.dots, 0) / (dots || 1));
-    return { id: `${instance}-A${i}`, name: names[i % names.length], coordinators, dots, new7d: sum("new7d"), active: sum("active"), inactive: sum("inactive"), applied: sum("applied"), activity: wavg("activity"), trend: wavg("trend"), quiet: false };
-  });
-}
-
-function liveHierarchy(instance: string, orgs: RollupOrg[], view: "all" | "seeker" | "provider"): AggNode[] {
-  let ci = 0;
-  return orgs.map((org) => ({ org, o: statsFor(org, view) })).filter((x) => x.o.dots > 0).map(({ org, o }) => {
-    const dots = Math.max(1, o.dots);
-    const cCount = Math.max(1, Math.min(6, Math.round(o.dots / 400) || 1));
-    const coordinators = splitInto(o.dots, cCount, Math.max(1, Math.floor(o.dots / (cCount * 4)))).map((d) => makeCoord(instance, ci++, Math.max(1, d)));
-    const activity = clamp(Math.round((o.active / dots / 0.15) * 55 + (o.new7d / dots / 0.045) * 35 + 6), 6, 100);
-    const trend = Math.round(coordinators.reduce((a, c) => a + c.trend * c.dots, 0) / (coordinators.reduce((a, c) => a + c.dots, 0) || 1));
-    return { id: org.id, name: org.name, dots: o.dots, new7d: o.new7d, active: o.active, inactive: o.inactive, atRisk: o.atRisk, applied: o.applied, activity, trend, quiet: o.new7d === 0, coordinators, members: view === "all" ? org.members : org.members.filter((m) => m.kind === view) };
-  });
-}
-const fmtDate = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
-
-interface Indiv { id: string; color: string; joined: string; lastSeen: string; role: string; education: string; applications: number; lifecycle: string; completion: number; city: string; }
-function genIndividuals(instance: string, n: number): Indiv[] {
-  const cities = CITIES[instance] ?? CITIES.UP; const now = Date.now();
-  return Array.from({ length: n }, () => {
-    const daysAgo = Math.floor(Math.random() * 240);
-    const apps = Math.random() < 0.45 ? 0 : 1 + Math.floor(Math.random() * 8);
-    const lastApply = apps > 0 ? Math.floor(Math.random() * 180) : null;
-    let lifecycle = "Inactive";
-    if (daysAgo <= 7) lifecycle = "New"; else if (lastApply !== null && lastApply <= 30) lifecycle = "Active"; else if (lastApply !== null && lastApply <= 90) lifecycle = "At Risk";
-    const d = new Date(now - daysAgo * 86400000);
-    const seen = 1 + Math.floor(Math.random() * 20);
-    return { id: `${instance}-${100000 + Math.floor(Math.random() * 899999)}`, color: pick(AV), joined: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`, lastSeen: `last seen ${seen}d ago`, role: pick(ROLES), education: pick(EDU), applications: apps, lifecycle, completion: pick([100, 100, 100, 80, 60, 40]), city: pick(cities) };
-  });
-}
-
-const LC_BADGE: Record<string, string> = {
-  New: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  Active: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  "At Risk": "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
-};
-const actColor = (a: number) => (a >= 60 ? "bg-emerald-500" : a >= 40 ? "bg-amber-500" : "bg-rose-500");
-
-// Lifecycle cards — Agg DPG style: soft tint + big coloured number + white icon square + descriptive sub-text.
 const LIFECYCLE: { key: "new7d" | "active" | "atRiskN" | "inactive"; label: string; desc: string; icon: typeof Users; tint: string; icon_c: string; num_c: string }[] = [
   { key: "new7d", label: "New", desc: "Joined within the last 7 days", icon: Sparkles, tint: "from-emerald-50 to-card dark:from-emerald-950/20 dark:to-card", icon_c: "text-emerald-600 dark:text-emerald-400", num_c: "text-emerald-600 dark:text-emerald-400" },
   { key: "active", label: "Active", desc: "Applied to a job in the last 30 days", icon: Users, tint: "from-blue-50 to-card dark:from-blue-950/20 dark:to-card", icon_c: "text-blue-600 dark:text-blue-400", num_c: "text-blue-600 dark:text-blue-400" },
@@ -124,20 +43,11 @@ type SortKey = "activity" | "dots" | "new7d";
 export function DistrictBluedots({ district }: { district: string }) {
   const instance = INSTANCE[district] ?? "UP";
   const [view, setView] = useState<"all" | "seeker" | "provider">("all");
-  const seekerTotal = REAL_TOTAL[instance] ?? 0;
-  const providerTotal = PROVIDER_TOTAL[instance] ?? 0;
-  let realTotal = view === "seeker" ? seekerTotal : view === "provider" ? providerTotal : seekerTotal + providerTotal;
   const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";
-  const rollupFn = useServerFn(fetchDistrictRollup);
-  const liveQ = useQuery({ queryKey: ["district-rollup", instance], queryFn: () => rollupFn({ data: { instance } }), staleTime: 5 * 60_000 });
-  const live = liveQ.data && liveQ.data.available ? liveQ.data : null;
-  const liveOn = !!live;
-  const liveAggs = useMemo(() => (live ? liveHierarchy(instance, live.orgs, view) : []), [live, instance, view]);
-  const sampleAggs = useMemo(() => genHierarchy(instance, realTotal), [instance, realTotal]);
-  const aggs = liveOn ? liveAggs : sampleAggs;
+  const liveQ = useLiveRollup(instance);
+  const aggs = useMemo<AggNode[]>(() => liveQ.orgs.map(org => ({ ...nodeFor(org, view), coordinators: org.coordinators.map(c => nodeFor(c, view)) })), [liveQ.data, view]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [drill, setDrill] = useState<Node | null>(null);
-  const [period, setPeriod] = useState("7");
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "activity", dir: "desc" });
 
   const t = useMemo(() => {
@@ -145,16 +55,15 @@ export function DistrictBluedots({ district }: { district: string }) {
     for (const a of aggs) { o.dots += a.dots; o.new7d += a.new7d; o.active += a.active; o.inactive += a.inactive; o.applied += a.applied; o.coords += a.coordinators.length; }
     return o;
   }, [aggs]);
-  if (liveOn) realTotal = t.dots;
-  const atRisk = liveOn ? aggs.reduce((a, x) => a + (x.atRisk ?? 0), 0) : Math.max(0, realTotal - t.new7d - t.active - t.inactive);
+  const realTotal = t.dots;
+  const atRisk = aggs.reduce((a, x) => a + x.atRisk, 0);
   const lcVal: Record<string, number> = { new7d: t.new7d, active: t.active, atRiskN: atRisk, inactive: t.inactive };
-  const users = Math.max(1, Math.round(realTotal / 2.6));
 
   const attention = useMemo(() => {
     const quietCoords = aggs.flatMap((a) => a.coordinators).filter((c) => c.quiet);
     const worst = [...aggs].sort((a, b) => a.activity - b.activity)[0];
     const items: { tone: "danger" | "warn"; title: string; sub: string }[] = [];
-    if (worst) items.push({ tone: "danger", title: worst.trend === 0 ? `${worst.name} — activity flat` : `${worst.name} — activity ${worst.trend > 0 ? "▲" : "▼"} ${Math.abs(worst.trend)} pts`, sub: `lowest in district · ${pctOf(worst.inactive, worst.dots)}% inactive` });
+    if (worst) items.push({ tone: "danger", title: `${worst.name} — activity ${worst.activity}`, sub: `lowest in district · ${pctOf(worst.inactive, worst.dots)}% inactive` });
     if (quietCoords.length) items.push({ tone: "warn", title: `${quietCoords.length} coordinator${quietCoords.length > 1 ? "s" : ""} · 0 new onboards`, sub: quietCoords.slice(0, 2).map((c) => c.name).join(", ") + (quietCoords.length > 2 ? "…" : "") });
     items.push({ tone: "warn", title: `Inactive share ${pctOf(t.inactive, t.dots)}%`, sub: "district-wide · re-engagement needed" });
     return items.slice(0, 3);
@@ -166,23 +75,17 @@ export function DistrictBluedots({ district }: { district: string }) {
   }, [aggs, sort]);
   const toggle = (id: string) => setExpanded((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleSort = (k: SortKey) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "desc" }));
-  const drillRows = useMemo<Indiv[]>(() => {
-    if (!drill) return [];
-    if (drill.members) return drill.members.map((s, i) => ({ id: s.id, color: AV[i % AV.length], joined: fmtDate(s.joined), lastSeen: "", role: s.kind === "provider" ? `Provider · ${s.livePostings} live posting${s.livePostings === 1 ? "" : "s"}` : "Seeker", education: "", applications: s.applications, lifecycle: s.lifecycle, completion: 0, city: "" }));
-    return genIndividuals(instance, Math.min(drill.dots, 60));
-  }, [drill, instance]);
-
   const SortTh = ({ k, label, info }: { k: SortKey; label: string; info?: ReactNode }) => (
     <th className="px-3 py-2.5 text-right font-medium">
       <span className="inline-flex items-center gap-1 justify-end">
-        <button type="button" onClick={() => toggleSort(k)} className={cn("inline-flex items-center gap-1 hover:text-foreground", sort.key === k && "text-foreground")}>
+        <Button variant="ghost" size="sm" type="button" onClick={() => toggleSort(k)} className={cn("inline-flex items-center gap-1 hover:text-foreground", sort.key === k && "text-foreground")}>
           {label}<ArrowUpDown className="h-3 w-3 opacity-60" />
-        </button>
+        </Button>
         {info && (
           <TooltipProvider delayDuration={100}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label={`About ${label}`} className="text-muted-foreground hover:text-foreground"><Info className="h-3.5 w-3.5" /></button>
+                <Button variant="ghost" size="sm" type="button" aria-label={`About ${label}`} className="text-muted-foreground hover:text-foreground"><Info className="h-3.5 w-3.5" /></Button>
               </TooltipTrigger>
               <TooltipContent side="top" align="end" className="max-w-[260px] text-left text-xs font-normal normal-case tracking-normal leading-relaxed">{info}</TooltipContent>
             </Tooltip>
@@ -191,12 +94,11 @@ export function DistrictBluedots({ district }: { district: string }) {
       </span>
     </th>
   );
-  const TrendIcon = ({ v, sz = "h-3.5 w-3.5" }: { v: number; sz?: string }) => v === 0 ? <Minus className={cn(sz, "text-muted-foreground")} /> : v > 0 ? <TrendingUp className={cn(sz, "text-emerald-600 dark:text-emerald-400")} /> : <TrendingDown className={cn(sz, "text-rose-600 dark:text-rose-400")} />;
   const Row = ({ n, kind }: { n: Node; kind: "agg" | "coord" }) => (
     <tr className={cn("border-t cursor-pointer", kind === "coord" ? "bg-muted/20 hover:bg-muted/40" : "hover:bg-muted/30")} onClick={() => (kind === "agg" ? toggle(n.id) : setDrill(n))}>
       <td className="px-3 py-2.5">
         {kind === "agg" ? (
-          <span className="flex items-center gap-2 font-medium">{expanded.has(n.id) ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}<Building2 className="h-4 w-4 text-brand" />{n.members ? (n.name === n.id ? <span className="font-mono text-xs truncate max-w-[260px]" title={n.id}>{n.name}</span> : <span className="truncate max-w-[260px]" title={n.id}>{n.name}</span>) : n.name}{n.members && <button type="button" onClick={(e) => { e.stopPropagation(); setDrill(n); }} className="text-[11px] font-normal text-muted-foreground underline decoration-dotted hover:text-foreground">dots</button>}</span>
+          <span className="flex items-center gap-2 font-medium">{expanded.has(n.id) ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}<Building2 className="h-4 w-4 text-brand" />{n.members ? (n.name === n.id ? <span className="font-mono text-xs truncate max-w-[260px]" title={n.id}>{n.name}</span> : <span className="truncate max-w-[260px]" title={n.id}>{n.name}</span>) : n.name}{n.members && <Button variant="ghost" size="sm" type="button" onClick={(e) => { e.stopPropagation(); setDrill(n); }} className="text-[11px] font-normal text-muted-foreground underline decoration-dotted hover:text-foreground">dots</Button>}</span>
         ) : (
           <span className="flex items-center gap-2 pl-6"><span className="h-1.5 w-1.5 rounded-full bg-brand/60" /><span className={cn(n.quiet ? "text-amber-600 dark:text-amber-400 font-medium" : "text-foreground")}>{n.name}</span>{n.quiet && <span className="text-[11px] text-amber-600 dark:text-amber-400">· 0 new</span>}<span className="text-[11px] text-muted-foreground underline decoration-dotted">dots</span></span>
         )}
@@ -206,42 +108,41 @@ export function DistrictBluedots({ district }: { district: string }) {
       <td className="px-3 py-2.5 text-right tabular-nums">{n.new7d === 0 ? <span className="text-amber-600 dark:text-amber-400">0</span> : fmtN(n.new7d)}</td>
       <td className="px-3 py-2.5 text-right tabular-nums">{pctOf(n.active, n.dots)}%</td>
       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{pctOf(n.inactive, n.dots)}%</td>
-      <td className="px-3 py-2.5"><div className="flex items-center justify-end gap-2"><TrendIcon v={n.trend} /><div className="h-2 w-20 rounded-full bg-muted overflow-hidden"><div className={cn("h-full rounded-full", actColor(n.activity))} style={{ width: `${n.activity}%` }} /></div><span className="tabular-nums font-medium w-6 text-right">{n.activity}</span></div></td>
+      <td className="px-3 py-2.5"><div className="flex items-center justify-end gap-2"><Progress className="w-20" value={n.activity} /><span className="tabular-nums font-medium w-6 text-right">{n.activity}</span></div></td>
     </tr>
   );
 
+  if (liveQ.loading) return <LiveState loading retry={liveQ.retry} />;
+  if (!liveQ.available || liveQ.isError) return <LiveState loading={false} retry={liveQ.retry} />;
+  if (!aggs.length) return <LiveState loading={false} retry={liveQ.retry} empty="No Blue Dots data for this district yet" />;
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">My Blue Dots</h1><Badge variant="secondary" className="bg-brand-soft text-brand">{district} · {instance}</Badge></div>
-          <p className="mt-1 text-sm text-muted-foreground">Track every participant across your district — at a glance.</p>
         </div>
         <div className="flex items-center gap-2">
           <div role="group" aria-label="Participant type" className="inline-flex rounded-lg bg-muted p-1">
             {(["all", "seeker", "provider"] as const).map((v) => (
-              <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
+              <Button variant="ghost" size="sm" key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
                 className={cn("rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors", view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                 {v}
-              </button>
+              </Button>
             ))}
           </div>
-          <Select value={period} onValueChange={setPeriod}><SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="7">This week</SelectItem><SelectItem value="30">Last 30 days</SelectItem><SelectItem value="90">Last 90 days</SelectItem></SelectContent></Select>
-          <Button className="gap-2"><UserPlus className="h-4 w-4" /> Add Participants</Button>
         </div>
       </div>
 
-      {/* Preview banner */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" /><p className="text-amber-800 dark:text-amber-300"><span className="font-medium">Preview.</span> {liveOn ? <>Organisation rows, totals and lifecycle are live ({fmtN(realTotal)} {typeLabel.toLowerCase()}{view !== "seeker" && live ? ` · ${fmtN(live.orgs.reduce((a, o) => a + o.livePostings, 0))} live job postings` : ""}); the coordinator split, trends and activity are still sample.</> : <>Totals use the live count ({fmtN(realTotal)}); the organisation / coordinator split, trends and activity are sample until the Blue Dots database is connected.</>}</p></div>
+      {aggs.some(a => a.name === a.id) && <p className="text-xs text-muted-foreground">Orgs without a registered name shown by org id.</p>}
 
       {/* SEEKERS summary strip */}
       <div className="flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4">
         <div className="h-11 w-11 rounded-lg bg-brand-soft text-brand flex items-center justify-center"><Users className="h-5 w-5" /></div>
         <div><div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{typeLabel}</div><div className="text-xl font-bold tabular-nums">{fmtN(realTotal)} total</div></div>
         <div className="hidden sm:block h-9 w-px bg-border mx-1" />
-        <div className="text-sm text-muted-foreground">Lifecycle and profile health across {district}.</div>
-        <Button variant="outline" size="sm" className="ml-auto gap-2"><RefreshCw className="h-4 w-4" /> Refresh</Button>
+        <div className="text-sm text-muted-foreground">Lifecycle across {district}.</div>
+        <Button variant="outline" size="sm" onClick={liveQ.retry} disabled={liveQ.isFetching} className="ml-auto gap-2"><RefreshCw className="h-4 w-4" /> Refresh</Button>
       </div>
 
       {/* Lifecycle cards */}
@@ -287,8 +188,7 @@ export function DistrictBluedots({ district }: { district: string }) {
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">By organisation</div>
-          <div className="text-xs text-muted-foreground">{aggs.length} organisations · {t.coords} coordinators · ranked by activity · expand to drill in</div>
-          {liveOn && <div className="text-xs text-muted-foreground italic">Live data · coordinator roles still sample (orgs without a registered name shown by org id).</div>}
+          <div className="text-xs text-muted-foreground">{aggs.length} organisations · {t.coords} coordinators</div>
         </div>
         <div className="rounded-xl border bg-card overflow-x-auto">
           <table className="w-full min-w-[840px] text-sm">
@@ -298,11 +198,10 @@ export function DistrictBluedots({ district }: { district: string }) {
                 label="Activity"
                 info={
                   <div className="space-y-1.5">
-                    <div><span className="font-medium text-foreground">Activity score (0–100)</span> — blends recent onboarding, active share, and the trend vs the previous period.</div>
+                    <div><span className="font-medium text-foreground">Activity score (0–100)</span> — blends recent onboarding (last 7 days) and active share.</div>
                     <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> 60+ · healthy</div>
                     <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> 40–59 · slipping</div>
                     <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500" /> below 40 · low</div>
-                    <div>Arrow shows the change vs last period: ▲ up · ▼ down · – flat.</div>
                   </div>
                 }
               /></tr>
@@ -320,24 +219,8 @@ export function DistrictBluedots({ district }: { district: string }) {
       {/* Coordinator drill-down — Agg DPG participant table style */}
       <Dialog open={!!drill} onOpenChange={(o) => !o && setDrill(null)}>
         <DialogContent className="max-w-4xl">
-          <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · ${drill.members ? `live, first ${fmtN(drill.members.length)}` : `sample of ${fmtN(Math.min(drill.dots, 60))}`}` : ""}</DialogDescription></DialogHeader>
-          <div className="max-h-[500px] overflow-auto rounded-lg border">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="sticky top-0 bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground"><tr><th className="px-4 py-2.5 font-medium">Participant</th><th className="px-4 py-2.5 font-medium">Joined</th><th className="px-4 py-2.5 font-medium">Profile status</th><th className="px-4 py-2.5 font-medium">Role wanted</th><th className="px-4 py-2.5 text-right font-medium">Apps</th><th className="px-4 py-2.5 font-medium">Lifecycle</th></tr></thead>
-              <tbody>
-                {drillRows.map((r) => (
-                  <tr key={r.id} className="border-t hover:bg-muted/20">
-                    <td className="px-4 py-2.5"><div className="flex items-center gap-3"><div className={cn("h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0", r.color)}><User className="h-4 w-4" /></div><div><div className="font-mono text-xs font-medium text-foreground">{r.id}</div><div className="text-[11px] text-muted-foreground">{r.city}</div></div></div></td>
-                    <td className="px-4 py-2.5 whitespace-nowrap"><div className="text-foreground">{r.joined}</div><div className="text-[11px] text-muted-foreground">{r.lastSeen}</div></td>
-                    <td className="px-4 py-2.5"><div className="flex items-center gap-2"><div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${r.completion}%` }} /></div><span className="text-xs tabular-nums text-muted-foreground">{r.completion}%</span></div></td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{r.role}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{r.applications}</td>
-                    <td className="px-4 py-2.5"><Badge variant="outline" className={`rounded-full ${LC_BADGE[r.lifecycle]}`}>{r.lifecycle}</Badge></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · showing ${fmtN(drill.members.length)} real participants` : ""}</DialogDescription></DialogHeader>
+          <MemberTable members={drill?.members ?? []} avatarClasses={AV} months={MONTHS} />
         </DialogContent>
       </Dialog>
     </div>

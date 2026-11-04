@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Canonical Blue Dots tables live in the campaign-manager project (NEW_SUPABASE_*), public schema.
-// Org = bluedot_users.onboarded_by_org_id. Server-only.
+// Blue Dot → coordinator_org_id → shared org_id. Server-only.
 function cmClient(): SupabaseClient<any, any, any> | null {
   const url = process.env.NEW_SUPABASE_URL;
   const key = process.env.NEW_SUPABASE_SERVICE_ROLE_KEY;
@@ -9,17 +9,9 @@ function cmClient(): SupabaseClient<any, any, any> | null {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-export type Lifecycle = "New" | "Active" | "At Risk" | "Inactive";
-export interface RollupMember { id: string; kind: "seeker" | "provider"; joined: string; applications: number; livePostings: number; lifecycle: Lifecycle }
-export interface RollupStats { dots: number; new7d: number; active: number; atRisk: number; inactive: number; applied: number }
-export interface RollupOrg { id: string; name: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[] }
-export type DistrictRollup =
-  | { available: true; instance: string; orgs: RollupOrg[]; coordinatorTier: "sample" }
-  | { available: false };
-
+import { buildRollup, resolveAggregator, type AggregatorRow, type UserRow, type ApplyRow, type PostingRow, type DistrictRollup } from "./rollup.model";
+export type { DistrictRollup, RollupOrg, RollupCoordinator, RollupMember, RollupStats, Lifecycle } from "./rollup.model";
 const PAGE = 1000;
-const MEMBERS_PER_KIND = 150;
-const emptyStats = (): RollupStats => ({ dots: 0, new7d: 0, active: 0, atRisk: 0, inactive: 0, applied: 0 });
 
 // Keyset pagination on a unique key; continue from the last key actually returned.
 async function readAll<T extends Record<string, unknown>>(
@@ -38,85 +30,32 @@ async function readAll<T extends Record<string, unknown>>(
     out.push(...rows);
     if (rows.length === 0) break;
     last = String(rows[rows.length - 1][key]);
-    if (rows.length < PAGE) break;
+
   }
   return out;
 }
 
-export async function loadDistrictRollup(instance: string, aggregatorId?: string | null): Promise<DistrictRollup> {
+export async function loadDistrictRollup(instance: string, aggregatorId?: string | null, offset = 0, coordinatorId?: string | null): Promise<DistrictRollup> {
   try {
     const sb = cmClient();
     if (!sb || !instance) return { available: false };
-    const [users, applies, postings] = await Promise.all([
-      readAll<{ id: string; created_at: string; domains: string[] | null; onboarded_by_org_id: string | null }>(
-        sb, "bluedot_users", "id,created_at,domains,onboarded_by_org_id", "id", instance,
-        aggregatorId ? (q) => q.eq("onboarded_by_org_id", aggregatorId) : undefined),
-      readAll<{ action_id: string; source_item_owner: string; created_at: string }>(
-        sb, "bluedot_item_actions", "action_id,source_item_owner,created_at", "action_id", instance, (q) => q.eq("action_type", "apply")),
-      readAll<{ item_id: string; created_by: string }>(
-        sb, "bluedot_items", "item_id,created_by", "item_id", instance, (q) => q.eq("item_type", "job_posting_1.0").eq("lifecycle_status", "live")),
+    const [arms, users, applies, postings] = await Promise.all([
+      readAll<AggregatorRow & Record<string, unknown>>(sb, "bluedot_aggregators", "org_id,org_name,coordinator_org_id,coordinator_type,test_flag", "coordinator_org_id", instance),
+      readAll<UserRow & Record<string, unknown>>(sb, "bluedot_users", "id,created_at,domains,onboarded_by_org_id", "id", instance),
+      readAll<ApplyRow & Record<string, unknown>>(sb, "bluedot_item_actions", "action_id,source_item_owner,created_at", "action_id", instance, q => q.eq("action_type", "apply")),
+      readAll<PostingRow & Record<string, unknown>>(sb, "bluedot_items", "item_id,created_by", "item_id", instance, q => q.eq("item_type", "job_posting_1.0").eq("lifecycle_status", "live")),
     ]);
-    if (!users.length) return { available: false };
-    // Real org names: bluedot_aggregators.coordinator_org_id (the org's seeker/provider arm) = onboarded_by_org_id.
-    const names = new Map<string, string>();
-    try {
-      const { data: aggs } = await sb.from("bluedot_aggregators").select("coordinator_org_id,org_name,coordinator_type,test_flag").eq("instance", instance).limit(5000);
-      const rows = ((aggs ?? []) as { coordinator_org_id: string | null; org_name: string | null; coordinator_type: string | null; test_flag: boolean | null }[])
-        .filter((r) => r.coordinator_org_id && r.org_name && !r.test_flag && !/test_marker/i.test(r.org_name));
-      const dup = new Map<string, number>();
-      for (const r of rows) dup.set(r.org_name!.trim(), (dup.get(r.org_name!.trim()) ?? 0) + 1);
-      for (const r of rows) {
-        const n = r.org_name!.trim();
-        names.set(r.coordinator_org_id!, (dup.get(n) ?? 0) > 1 && r.coordinator_type ? `${n} (${r.coordinator_type.replace("_", " ")})` : n);
-      }
-    } catch (e) { console.error("[rollup] org names unavailable", e); }
-
-    const lastApply = new Map<string, number>();
-    const applyCount = new Map<string, number>();
-    for (const a of applies) {
-      const t = Date.parse(a.created_at);
-      applyCount.set(a.source_item_owner, (applyCount.get(a.source_item_owner) ?? 0) + 1);
-      if (Number.isFinite(t) && t > (lastApply.get(a.source_item_owner) ?? 0)) lastApply.set(a.source_item_owner, t);
+    const all = buildRollup(arms, users, applies, postings);
+    if (coordinatorId) {
+      const registered = arms.some(a => a.coordinator_org_id === coordinatorId);
+      const org = registered ? all.find(o => o.coordinators.some(c => c.id === coordinatorId)) : undefined;
+      const coord = org?.coordinators.find(c => c.id === coordinatorId);
+      return { available: true, instance, orgs: org && coord ? [{ ...org, seekers: coord.seekers, providers: coord.providers, livePostings: coord.livePostings, members: coord.members, coordinators: [coord] }] : [], nextOffset: null };
     }
-    const liveBy = new Map<string, number>();
-    for (const p of postings) liveBy.set(p.created_by, (liveBy.get(p.created_by) ?? 0) + 1);
-
-    const now = Date.now();
-    const DAY = 86400000;
-    const orgs = new Map<string, RollupOrg & { sCount: number; pCount: number }>();
-    for (const u of users) {
-      const doms = u.domains ?? [];
-      const isSeeker = doms.includes("seeker");
-      const isProvider = doms.includes("provider");
-      if (!isSeeker && !isProvider) continue;
-      const orgId = u.onboarded_by_org_id || "unattributed";
-      let o = orgs.get(orgId);
-      if (!o) { o = { id: orgId, name: names.get(orgId) ?? orgId, seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [], sCount: 0, pCount: 0 }; orgs.set(orgId, o); }
-      const created = Date.parse(u.created_at);
-      const isNew = Number.isFinite(created) && now - created <= 7 * DAY;
-
-      if (isSeeker) {
-        const la = lastApply.get(u.id);
-        const apps = applyCount.get(u.id) ?? 0;
-        const lc: Lifecycle = isNew ? "New" : la && now - la <= 30 * DAY ? "Active" : la && now - la <= 90 * DAY ? "At Risk" : "Inactive";
-        const s = o.seekers;
-        s.dots++; if (apps > 0) s.applied++;
-        if (lc === "New") s.new7d++; else if (lc === "Active") s.active++; else if (lc === "At Risk") s.atRisk++; else s.inactive++;
-        if (o.sCount++ < MEMBERS_PER_KIND) o.members.push({ id: u.id, kind: "seeker", joined: u.created_at, applications: apps, livePostings: 0, lifecycle: lc });
-      }
-      if (isProvider) {
-        const live = liveBy.get(u.id) ?? 0;
-        const lc: Lifecycle = isNew ? "New" : live > 0 ? "Active" : "Inactive";
-        const p = o.providers;
-        p.dots++; if (live > 0) p.applied++;
-        if (lc === "New") p.new7d++; else if (lc === "Active") p.active++; else p.inactive++;
-        o.livePostings += live;
-        if (o.pCount++ < MEMBERS_PER_KIND) o.members.push({ id: u.id, kind: "provider", joined: u.created_at, applications: 0, livePostings: live, lifecycle: lc });
-      }
-    }
-    const list = [...orgs.values()].map(({ sCount: _s, pCount: _p, ...o }) => o)
-      .sort((a, b) => b.seekers.dots + b.providers.dots - (a.seekers.dots + a.providers.dots));
-    return { available: true, instance, orgs: list, coordinatorTier: "sample" };
+    const scoped = aggregatorId ? resolveAggregator(all, aggregatorId) : all;
+    // Bound every server response, including all registered arms of one organisation.
+    const orgs = scoped.slice(offset, offset + 2);
+    return { available: true, instance, orgs, nextOffset: offset + orgs.length < scoped.length ? offset + orgs.length : null };
   } catch (e) {
     console.error("[rollup] district rollup failed", e);
     return { available: false };
