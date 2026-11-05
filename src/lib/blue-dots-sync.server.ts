@@ -31,7 +31,7 @@ export async function performBlueDotsSync() {
         const rows = (data ?? []) as unknown as Record<string, unknown>[];
         if (!rows.length) return;
         for (let i = 0; i < rows.length; i += 500) {
-          const { error: writeError } = await local.from("bd_sync_stage").upsert(rows.slice(i, i + 500).map(row => ({ run_id: run, table_name: spec.target, row_key: String(row[spec.key]), payload: row })), { onConflict: "run_id,table_name,row_key" });
+          const { error: writeError } = await local.from("bd_sync_stage").upsert(rows.slice(i, i + 500).map(row => ({ run_id: run, table_name: spec.target, row_key: `${instance}:${String(row[spec.key])}`, payload: row })), { onConflict: "run_id,table_name,row_key" });
           if (writeError) throw new Error(writeError.message);
         }
         last = String(rows[rows.length - 1][spec.key]);
