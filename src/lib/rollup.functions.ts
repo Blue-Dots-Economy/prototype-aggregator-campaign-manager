@@ -19,15 +19,6 @@ export const fetchDistrictRollup = createServerFn({ method: "POST" })
     return loadDistrictRollup(scoped.instance, scoped.aggregatorId, data.offset, scoped.coordinatorId);
   });
 
-export const syncBlueDots = createServerFn({ method: "POST" })
-  .inputValidator((d: { instance: string; aggregatorId?: string; coordinatorId?: string }) => d)
-  .handler(async ({ data }) => {
-    const { blueDotsScope } = await import("./blue-dots-auth.server");
-    await blueDotsScope(data);
-    const { performBlueDotsSync } = await import("./blue-dots-sync.server");
-    return performBlueDotsSync();
-  });
-
 export const fetchArmMembers = createServerFn({ method: "POST" })
   .inputValidator((d: { instance: string; orgId?: string; coordinatorId?: string; kind: "all" | "seeker" | "provider" }) => {
     if (!["UP", "KA"].includes(d.instance) || !["all", "seeker", "provider"].includes(d.kind) || (d.orgId?.length ?? 0) > 150 || (d.coordinatorId?.length ?? 0) > 150) throw new Error("Invalid participant scope");

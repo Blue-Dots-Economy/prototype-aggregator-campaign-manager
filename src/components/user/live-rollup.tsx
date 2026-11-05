@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { fetchDistrictRollup, fetchArmMembers, syncBlueDots, type RollupMember } from "@/lib/rollup.functions";
+import { fetchDistrictRollup, fetchArmMembers, type RollupMember } from "@/lib/rollup.functions";
 export { nodeFor, type LiveNode, type ParticipantView } from "@/lib/rollup.view";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,10 +11,8 @@ import { formatDistanceToNow } from "date-fns";
 
 export function useLiveRollup(instance: string, aggregatorId?: string, coordinatorId?: string) {
   const fn = useServerFn(fetchDistrictRollup);
-  const sync = useServerFn(syncBlueDots);
   const cache = useQueryClient();
-  const refresh = useMutation({ mutationFn: () => sync({ data: { instance, aggregatorId, coordinatorId } }), onSuccess: async (result) => {
-    if (result.busy) throw new Error("An update is already running; try again shortly");
+  const refresh = useMutation({ mutationFn: async () => {
     await cache.invalidateQueries({ queryKey: ["live-blue-dots"] });
     await cache.invalidateQueries({ queryKey: ["blue-dots-members"] });
   } });

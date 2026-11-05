@@ -26,7 +26,6 @@ import { Route as UserLevelAnalysisRouteImport } from './routes/user-level-analy
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as CampaignsCampaignRouteImport } from './routes/campaigns_.$campaign'
 import { Route as ReviewCallIdRouteImport } from './routes/review_.$callId'
-import { Route as ApiPublicHooksSyncBlueDotsRouteImport } from './routes/api/public/hooks/sync-blue-dots'
 import { Route as ApiPublicHooksSyncSnapshotsRouteImport } from './routes/api/public/hooks/sync-snapshots'
 import { Route as ApiPublicHooksZeffyWebhookRouteImport } from './routes/api.public/hooks.zeffy-webhook'
 
@@ -115,12 +114,6 @@ const ReviewCallIdRoute = ReviewCallIdRouteImport.update({
   path: '/review/$callId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicHooksSyncBlueDotsRoute =
-  ApiPublicHooksSyncBlueDotsRouteImport.update({
-    id: '/api/public/hooks/sync-blue-dots',
-    path: '/api/public/hooks/sync-blue-dots',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicHooksSyncSnapshotsRoute =
   ApiPublicHooksSyncSnapshotsRouteImport.update({
     id: '/api/public/hooks/sync-snapshots',
@@ -152,7 +145,6 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/campaigns/$campaign': typeof CampaignsCampaignRoute
   '/review/$callId': typeof ReviewCallIdRoute
-  '/api/public/hooks/sync-blue-dots': typeof ApiPublicHooksSyncBlueDotsRoute
   '/api/public/hooks/sync-snapshots': typeof ApiPublicHooksSyncSnapshotsRoute
   '/api/public/hooks/zeffy-webhook': typeof ApiPublicHooksZeffyWebhookRoute
 }
@@ -174,7 +166,6 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/campaigns/$campaign': typeof CampaignsCampaignRoute
   '/review/$callId': typeof ReviewCallIdRoute
-  '/api/public/hooks/sync-blue-dots': typeof ApiPublicHooksSyncBlueDotsRoute
   '/api/public/hooks/sync-snapshots': typeof ApiPublicHooksSyncSnapshotsRoute
   '/api/public/hooks/zeffy-webhook': typeof ApiPublicHooksZeffyWebhookRoute
 }
@@ -197,7 +188,6 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/campaigns_/$campaign': typeof CampaignsCampaignRoute
   '/review_/$callId': typeof ReviewCallIdRoute
-  '/api/public/hooks/sync-blue-dots': typeof ApiPublicHooksSyncBlueDotsRoute
   '/api/public/hooks/sync-snapshots': typeof ApiPublicHooksSyncSnapshotsRoute
   '/api/public/hooks/zeffy-webhook': typeof ApiPublicHooksZeffyWebhookRoute
 }
@@ -221,7 +211,6 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/campaigns/$campaign'
     | '/review/$callId'
-    | '/api/public/hooks/sync-blue-dots'
     | '/api/public/hooks/sync-snapshots'
     | '/api/public/hooks/zeffy-webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -243,7 +232,6 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/campaigns/$campaign'
     | '/review/$callId'
-    | '/api/public/hooks/sync-blue-dots'
     | '/api/public/hooks/sync-snapshots'
     | '/api/public/hooks/zeffy-webhook'
   id:
@@ -265,7 +253,6 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/campaigns_/$campaign'
     | '/review_/$callId'
-    | '/api/public/hooks/sync-blue-dots'
     | '/api/public/hooks/sync-snapshots'
     | '/api/public/hooks/zeffy-webhook'
   fileRoutesById: FileRoutesById
@@ -288,7 +275,6 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   CampaignsCampaignRoute: typeof CampaignsCampaignRoute
   ReviewCallIdRoute: typeof ReviewCallIdRoute
-  ApiPublicHooksSyncBlueDotsRoute: typeof ApiPublicHooksSyncBlueDotsRoute
   ApiPublicHooksSyncSnapshotsRoute: typeof ApiPublicHooksSyncSnapshotsRoute
   ApiPublicHooksZeffyWebhookRoute: typeof ApiPublicHooksZeffyWebhookRoute
 }
@@ -414,13 +400,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewCallIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/hooks/sync-blue-dots': {
-      id: '/api/public/hooks/sync-blue-dots'
-      path: '/api/public/hooks/sync-blue-dots'
-      fullPath: '/api/public/hooks/sync-blue-dots'
-      preLoaderRoute: typeof ApiPublicHooksSyncBlueDotsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/hooks/sync-snapshots': {
       id: '/api/public/hooks/sync-snapshots'
       path: '/api/public/hooks/sync-snapshots'
@@ -456,7 +435,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   CampaignsCampaignRoute: CampaignsCampaignRoute,
   ReviewCallIdRoute: ReviewCallIdRoute,
-  ApiPublicHooksSyncBlueDotsRoute: ApiPublicHooksSyncBlueDotsRoute,
   ApiPublicHooksSyncSnapshotsRoute: ApiPublicHooksSyncSnapshotsRoute,
   ApiPublicHooksZeffyWebhookRoute: ApiPublicHooksZeffyWebhookRoute,
 }
