@@ -9,6 +9,14 @@ export interface UserRow { id: string; created_at: string; domains: string[] | n
 export interface ApplyRow { action_id: string; source_item_owner: string; created_at: string }
 export interface PostingRow { item_id: string; created_by: string }
 export const emptyStats = (): RollupStats => ({ dots: 0, new7d: 0, active: 0, atRisk: 0, inactive: 0, applied: 0 });
+export type ParticipantView = "all" | "seeker" | "provider";
+/** The single stats selector for every participant-view surface. */
+export function statsFor(o: Pick<RollupOrg, "seekers" | "providers">, view: ParticipantView): RollupStats {
+  if (view === "seeker") return o.seekers;
+  if (view === "provider") return o.providers;
+  const a = o.seekers, b = o.providers;
+  return { dots: a.dots + b.dots, new7d: a.new7d + b.new7d, active: a.active + b.active, atRisk: a.atRisk + b.atRisk, inactive: a.inactive + b.inactive, applied: a.applied + b.applied };
+}
 const MEMBERS_PER_KIND = 150;
 const DAY = 86400000;
 const labels: Record<string, string> = { seeker: "Seeker unit", provider: "Provider unit", service_provider: "Service-provider unit" };

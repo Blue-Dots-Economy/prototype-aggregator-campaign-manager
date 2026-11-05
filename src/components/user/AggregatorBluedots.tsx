@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useLiveRollup, nodeFor, LiveState, MemberTable, type LiveNode } from "./live-rollup";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { coverageFor } from "@/lib/rollup.view";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 const AV = ["bg-muted text-muted-foreground"];
@@ -45,25 +46,22 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
   const realTotal = liveStats?.dots ?? 0;
   const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";
   const coords = useMemo(() => liveOrg?.coordinators.map(c => nodeFor(c, view)) ?? [], [liveOrg, view]);
-  const [drill, setDrill] = useState<Coord | null>(null);
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "activity", dir: "desc" });
-
-  const t = useMemo(() => {
-    const o = { new7d: 0, active: 0, inactive: 0, applied: 0 };
-    for (const c of coords) { o.new7d += c.new7d; o.active += c.active; o.inactive += c.inactive; o.applied += c.applied; }
-    return o;
-  }, [coords]);
+  const [drillId, setDrillId] = useState<string | null>(null);
+  const drill = coords.find(c => c.id === drillId) ?? null;
+  const setDrill = (c: Coord | null) => setDrillId(c?.id ?? null);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "dots", dir: "desc" });
+  const coverage = coverageFor(coords);
   const lcVal: Record<string, number> = { new7d: liveStats?.new7d ?? 0, active: liveStats?.active ?? 0, atRiskN: liveStats?.atRisk ?? 0, inactive: liveStats?.inactive ?? 0 };
 
   const attention = useMemo(() => {
     const quiet = coords.filter((c) => c.quiet);
-    const worst = [...coords].sort((a, b) => a.activity - b.activity)[0];
+    const worst = coords.filter(c => c.dots > 0).sort((a, b) => a.activity - b.activity)[0];
     const items: { tone: "danger" | "warn"; title: string; sub: string }[] = [];
     if (worst) items.push({ tone: "danger", title: `${worst.name} — activity ${worst.activity}`, sub: `lowest coordinator · ${pctOf(worst.inactive, worst.dots)}% inactive` });
     if (quiet.length) items.push({ tone: "warn", title: `${quiet.length} coordinator${quiet.length > 1 ? "s" : ""} · 0 new onboards`, sub: quiet.slice(0, 2).map((c) => c.name).join(", ") + (quiet.length > 2 ? "…" : "") });
-    items.push({ tone: "warn", title: `Inactive share ${pctOf(t.inactive, realTotal)}%`, sub: "org-wide · re-engagement needed" });
+    items.push({ tone: "warn", title: `Inactive share ${pctOf(liveStats?.inactive ?? 0, realTotal)}%`, sub: "org-wide · re-engagement needed" });
     return items.slice(0, 3);
-  }, [coords, t, realTotal]);
+  }, [coords, liveStats, realTotal]);
 
   const sorted = useMemo(() => {
     const m = sort.dir === "asc" ? 1 : -1;
@@ -97,7 +95,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
         <div className="flex items-center gap-2">
           <div role="group" aria-label="Participant type" className="inline-flex rounded-lg bg-muted p-1">
             {(["all", "seeker", "provider"] as const).map((v) => (
-              <Button variant="ghost" size="sm" key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
+              <Button variant="ghost" size="sm" key={v} type="button" onClick={() => { setView(v); setSort({ key: "dots", dir: "desc" }); }} aria-pressed={view === v}
                 className={cn("rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors", view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{v}</Button>
             ))}
           </div>
@@ -144,9 +142,9 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       <div>
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Coverage</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <MetricTile label="Coordinators" value={fmtN(coords.length)} caption="In your network" Icon={Layers} />
-          <MetricTile label="Avg Blue Dots / Coordinator" value={fmtN(Math.round(realTotal / Math.max(1, coords.length)))} caption="Managed each" Icon={Users} />
-          <MetricTile label="Applied" value={`${pctOf(t.applied, realTotal)}%`} caption={`${fmtN(t.applied)} with submissions`} Icon={Send} />
+          <MetricTile label="Coordinators" value={fmtN(coverage.count)} caption={`With ${typeLabel.toLowerCase()}`} Icon={Layers} />
+          <MetricTile label="Avg Blue Dots / Coordinator" value={fmtN(coverage.average)} caption="Per unit with participants" Icon={Users} />
+          <MetricTile label="Applied" value={`${pctOf(liveStats?.applied ?? 0, realTotal)}%`} caption={`${fmtN(liveStats?.applied ?? 0)} with submissions`} Icon={Send} />
         </div>
       </div>
 
