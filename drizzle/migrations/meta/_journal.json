@@ -29,6 +29,13 @@
       "when": 1791192538590,
       "tag": "0003_atlas_members_segment",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793860484084,
+      "tag": "0004_blue_dots_local_mirror",
+      "breakpoints": true
     }
   ]
 }
