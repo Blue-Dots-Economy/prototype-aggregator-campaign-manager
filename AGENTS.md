@@ -11,9 +11,9 @@
 
 ## Rules
 
-- My Blue Dots uses private local mirrors, atomic staged snapshot publication and SQL counts with a shared pure hierarchy projection; initial responses contain bounded counts, while IDs load lazily through the scoped member RPC.
-- Blue Dots mirror endpoints require a signed httpOnly login credential and registry-validated persona scope; scheduled syncs use the private database-held token, never a publishable key or client-set role.
-- Blue Dots mirror primary keys include instance plus source ID because UP and KA reuse user and item IDs; staging keys must carry instance too.
+- My Blue Dots reads count and member RPCs directly from the campaign-manager source DB (no local mirror sync) with a shared pure hierarchy projection; initial responses contain bounded counts, while IDs load lazily through the scoped member RPC.
+- Blue Dots server functions require a signed httpOnly login credential and registry-validated persona scope, never a client-set role.
+- Blue Dots data is keyed by instance plus source ID because UP and KA reuse user and item IDs.
 - My Blue Dots uses the model's single statsFor selector via pure view projections for all participant-dependent surfaces; coverage excludes zero-dot units while tables retain them.
 
 - Server functions must never return whole tables: responses are bounded by a framework size cap, so large lists are read in slices and stitched together client-side (see `fetchReviewCalls` + `useReviewCalls`). Keep slice steps derived from rows actually returned, because the database may hand back fewer rows than asked.
