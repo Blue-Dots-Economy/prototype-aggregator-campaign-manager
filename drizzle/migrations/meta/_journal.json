@@ -29,6 +29,27 @@
       "when": 1791192538590,
       "tag": "0003_atlas_members_segment",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793860484084,
+      "tag": "0004_blue_dots_local_mirror",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793860599391,
+      "tag": "0005_blue_dots_provider_applied_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793860699653,
+      "tag": "0006_blue_dots_instance_safe_keys",
+      "breakpoints": true
     }
   ]
 }

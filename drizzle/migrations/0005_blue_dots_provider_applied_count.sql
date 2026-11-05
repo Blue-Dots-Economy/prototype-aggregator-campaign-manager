@@ -1,0 +1,9 @@
+DROP FUNCTION public.get_bluedot_rollup(text);
+CREATE FUNCTION public.get_bluedot_rollup(p_instance text) RETURNS TABLE(org_id text,org_name text,coordinator_org_id text,coordinator_org_name text,coordinator_type text,s_total bigint,s_new bigint,s_active bigint,s_at_risk bigint,s_inactive bigint,s_applied bigint,p_total bigint,p_new bigint,p_active bigint,p_inactive bigint,p_live_postings bigint,p_applied bigint,updated_at timestamptz) LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
+ SELECT c.org_id,c.org_name,c.coordinator_org_id,c.coordinator_org_name,c.coordinator_type,
+ count(f.id) FILTER(WHERE kind='seeker'),count(f.id) FILTER(WHERE kind='seeker' AND lifecycle='New'),count(f.id) FILTER(WHERE kind='seeker' AND lifecycle='Active'),count(f.id) FILTER(WHERE kind='seeker' AND lifecycle='At Risk'),count(f.id) FILTER(WHERE kind='seeker' AND lifecycle='Inactive'),count(f.id) FILTER(WHERE kind='seeker' AND applications>0),
+ count(f.id) FILTER(WHERE kind='provider'),count(f.id) FILTER(WHERE kind='provider' AND lifecycle='New'),count(f.id) FILTER(WHERE kind='provider' AND lifecycle='Active'),count(f.id) FILTER(WHERE kind='provider' AND lifecycle='Inactive'),coalesce(sum(live_postings) FILTER(WHERE kind='provider'),0),count(f.id) FILTER(WHERE kind='provider' AND live_postings>0), (SELECT s.updated_at FROM bd_sync_state s WHERE id=true)
+ FROM bd_arm_catalog(p_instance) c LEFT JOIN bd_participant_facts(p_instance) f ON f.coordinator_org_id=c.coordinator_org_id GROUP BY c.org_id,c.org_name,c.coordinator_org_id,c.coordinator_org_name,c.coordinator_type;
+$$;
+REVOKE ALL ON FUNCTION public.get_bluedot_rollup(text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.get_bluedot_rollup(text) TO service_role;

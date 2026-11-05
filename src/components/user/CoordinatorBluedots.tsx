@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useLiveRollup, nodeFor, LiveState, MemberTable } from "./live-rollup";
+import { useLiveRollup, useLiveMembers, Freshness, MemberLoading, nodeFor, LiveState, MemberTable } from "./live-rollup";
 import { cn } from "@/lib/utils";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
@@ -32,7 +32,8 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
   const stats = arm ? nodeFor(arm, view) : null;
   const realTotal = stats?.dots ?? 0;
   const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";
-  const dots = stats?.members ?? [];
+  const membersQ = useLiveMembers(instance, undefined, coordName, view, !!arm);
+  const dots = membersQ.data ?? [];
   const [search, setSearch] = useState("");
   const [lcFilter, setLcFilter] = useState("all");
 
@@ -81,7 +82,7 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
         <div><div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{typeLabel}</div><div className="text-xl font-bold tabular-nums">{fmtN(realTotal)} total</div></div>
         <div className="hidden sm:block h-9 w-px bg-border mx-1" />
         <div className="text-sm text-muted-foreground">Your participants' lifecycle.</div>
-        <Button variant="outline" size="sm" onClick={liveQ.retry} disabled={liveQ.isFetching} className="ml-auto gap-2"><RefreshCw className="h-4 w-4" /> Refresh</Button>
+        <div className="ml-auto flex flex-wrap items-center gap-3"><Freshness updatedAt={liveQ.updatedAt} error={liveQ.refreshError} /><Button variant="outline" size="sm" onClick={liveQ.refresh} disabled={liveQ.isFetching || liveQ.refreshing} className="gap-2"><RefreshCw className={cn("h-4 w-4", liveQ.refreshing && "animate-spin")} /> Refresh</Button></div>
       </div>
 
       {/* Lifecycle cards */}
@@ -117,7 +118,8 @@ export function CoordinatorBluedots({ coordName, district }: { coordName: string
           <Select value={lcFilter} onValueChange={setLcFilter}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Status: All</SelectItem><SelectItem value="New">New</SelectItem><SelectItem value="Active">Active</SelectItem><SelectItem value="At Risk">At Risk</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select>
           <div className="text-xs text-muted-foreground whitespace-nowrap">{fmtN(filtered.length)} loaded · {fmtN(realTotal)} total</div>
         </div>
-        <MemberTable members={visible} avatarClasses={AV} months={MONTHS} />
+        <MemberLoading loading={membersQ.isPending} error={membersQ.isError} retry={() => void membersQ.refetch()} />
+        {membersQ.isSuccess && <MemberTable members={visible} avatarClasses={AV} months={MONTHS} />}
         {filtered.length > CAP && (<div className="p-3 text-center text-xs text-muted-foreground border-t">Showing first {fmtN(CAP)} of {fmtN(filtered.length)} — refine with search or filter.</div>)}
       </div>
     </div>

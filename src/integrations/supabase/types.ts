@@ -220,6 +220,159 @@ export type Database = {
         }
         Relationships: []
       }
+      bd_aggregators: {
+        Row: {
+          coordinator_org_id: string
+          coordinator_org_name: string | null
+          coordinator_type: string | null
+          instance: string
+          loaded_at: string
+          org_id: string | null
+          org_name: string | null
+          test_flag: boolean | null
+        }
+        Insert: {
+          coordinator_org_id: string
+          coordinator_org_name?: string | null
+          coordinator_type?: string | null
+          instance: string
+          loaded_at: string
+          org_id?: string | null
+          org_name?: string | null
+          test_flag?: boolean | null
+        }
+        Update: {
+          coordinator_org_id?: string
+          coordinator_org_name?: string | null
+          coordinator_type?: string | null
+          instance?: string
+          loaded_at?: string
+          org_id?: string | null
+          org_name?: string | null
+          test_flag?: boolean | null
+        }
+        Relationships: []
+      }
+      bd_item_actions: {
+        Row: {
+          action_id: string
+          created_at: string | null
+          instance: string
+          loaded_at: string
+          source_item_owner: string | null
+        }
+        Insert: {
+          action_id: string
+          created_at?: string | null
+          instance: string
+          loaded_at: string
+          source_item_owner?: string | null
+        }
+        Update: {
+          action_id?: string
+          created_at?: string | null
+          instance?: string
+          loaded_at?: string
+          source_item_owner?: string | null
+        }
+        Relationships: []
+      }
+      bd_items: {
+        Row: {
+          created_by: string | null
+          instance: string
+          item_id: string
+          loaded_at: string
+        }
+        Insert: {
+          created_by?: string | null
+          instance: string
+          item_id: string
+          loaded_at: string
+        }
+        Update: {
+          created_by?: string | null
+          instance?: string
+          item_id?: string
+          loaded_at?: string
+        }
+        Relationships: []
+      }
+      bd_sync_stage: {
+        Row: {
+          payload: Json
+          row_key: string
+          run_id: string
+          table_name: string
+        }
+        Insert: {
+          payload: Json
+          row_key: string
+          run_id: string
+          table_name: string
+        }
+        Update: {
+          payload?: Json
+          row_key?: string
+          run_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
+      bd_sync_state: {
+        Row: {
+          id: boolean
+          last_error: string | null
+          run_id: string | null
+          started_at: string | null
+          sync_token: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: boolean
+          last_error?: string | null
+          run_id?: string | null
+          started_at?: string | null
+          sync_token?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: boolean
+          last_error?: string | null
+          run_id?: string | null
+          started_at?: string | null
+          sync_token?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bd_users: {
+        Row: {
+          created_at: string | null
+          domains: string[] | null
+          id: string
+          instance: string
+          loaded_at: string
+          onboarded_by_org_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          domains?: string[] | null
+          id: string
+          instance: string
+          loaded_at: string
+          onboarded_by_org_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          domains?: string[] | null
+          id?: string
+          instance?: string
+          loaded_at?: string
+          onboarded_by_org_id?: string | null
+        }
+        Relationships: []
+      }
       call_rows: {
         Row: {
           applications_count: number | null
@@ -1073,6 +1226,72 @@ export type Database = {
           node_type: string
           program: string
           role: string
+        }[]
+      }
+      bd_arm_catalog: {
+        Args: { p_instance: string }
+        Returns: {
+          coordinator_org_id: string
+          coordinator_org_name: string
+          coordinator_type: string
+          org_id: string
+          org_name: string
+        }[]
+      }
+      bd_begin_sync: { Args: { p_run: string }; Returns: boolean }
+      bd_finish_sync: {
+        Args: { p_error?: string; p_run: string }
+        Returns: string
+      }
+      bd_participant_facts: {
+        Args: { p_ids?: string[]; p_instance: string }
+        Returns: {
+          applications: number
+          coordinator_org_id: string
+          id: string
+          joined: string
+          kind: string
+          lifecycle: string
+          live_postings: number
+        }[]
+      }
+      get_bluedot_members: {
+        Args: {
+          p_coordinator_id?: string
+          p_instance: string
+          p_kind?: string
+          p_org_id?: string
+        }
+        Returns: {
+          applications: number
+          id: string
+          joined: string
+          kind: string
+          lifecycle: string
+          live_postings: number
+        }[]
+      }
+      get_bluedot_rollup: {
+        Args: { p_instance: string }
+        Returns: {
+          coordinator_org_id: string
+          coordinator_org_name: string
+          coordinator_type: string
+          org_id: string
+          org_name: string
+          p_active: number
+          p_applied: number
+          p_inactive: number
+          p_live_postings: number
+          p_new: number
+          p_total: number
+          s_active: number
+          s_applied: number
+          s_at_risk: number
+          s_inactive: number
+          s_new: number
+          s_total: number
+          updated_at: string
         }[]
       }
       get_campaign_drop_causes: {

@@ -11,7 +11,9 @@
 
 ## Rules
 
-- My Blue Dots shares a pure hierarchy/lifecycle model and live paginated reader across the three personas; this keeps arm attribution consistent and server responses bounded.
+- My Blue Dots uses private local mirrors, atomic staged snapshot publication and SQL counts with a shared pure hierarchy projection; initial responses contain bounded counts, while IDs load lazily through the scoped member RPC.
+- Blue Dots mirror endpoints require a signed httpOnly login credential and registry-validated persona scope; scheduled syncs use the private database-held token, never a publishable key or client-set role.
+- Blue Dots mirror primary keys include instance plus source ID because UP and KA reuse user and item IDs; staging keys must carry instance too.
 - My Blue Dots uses the model's single statsFor selector via pure view projections for all participant-dependent surfaces; coverage excludes zero-dot units while tables retain them.
 
 - Server functions must never return whole tables: responses are bounded by a framework size cap, so large lists are read in slices and stitched together client-side (see `fetchReviewCalls` + `useReviewCalls`). Keep slice steps derived from rows actually returned, because the database may hand back fewer rows than asked.

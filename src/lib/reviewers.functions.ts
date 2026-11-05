@@ -27,6 +27,9 @@ export const resolveLogin = createServerFn({ method: "POST" })
       const { data: rows } = await client.rpc("app_user_login", { _email: email, _password: password || null });
       const row = (Array.isArray(rows) ? rows[0] : rows) as Record<string, string> | undefined;
       if (row?.role) {
+        // Separate signed, httpOnly credential for server-only Blue Dots mirrors.
+        const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
+        await issueBlueDotsSession(email);
         return {
           role: row.role as "admin" | "user" | "ecosystem" | "jfc" | "owner" | "coordinator",
           name: row.name ?? null,

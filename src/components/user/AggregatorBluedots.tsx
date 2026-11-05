@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useLiveRollup, nodeFor, LiveState, MemberTable, type LiveNode } from "./live-rollup";
+import { useLiveRollup, useLiveMembers, Freshness, MemberLoading, nodeFor, LiveState, MemberTable, type LiveNode } from "./live-rollup";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { coverageFor } from "@/lib/rollup.view";
@@ -49,6 +49,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
   const [drillId, setDrillId] = useState<string | null>(null);
   const drill = coords.find(c => c.id === drillId) ?? null;
   const setDrill = (c: Coord | null) => setDrillId(c?.id ?? null);
+  const membersQ = useLiveMembers(instance, liveOrg?.id, drill?.id, view, !!drill);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "dots", dir: "desc" });
   const coverage = coverageFor(coords);
   const lcVal: Record<string, number> = { new7d: liveStats?.new7d ?? 0, active: liveStats?.active ?? 0, atRiskN: liveStats?.atRisk ?? 0, inactive: liveStats?.inactive ?? 0 };
@@ -110,7 +111,7 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
         <div><div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{typeLabel}</div><div className="text-xl font-bold tabular-nums">{fmtN(realTotal)} total</div></div>
         <div className="hidden sm:block h-9 w-px bg-border mx-1" />
         <div className="text-sm text-muted-foreground">Lifecycle across {liveOrg && liveOrg.name !== liveOrg.id ? liveOrg.name : orgName}.</div>
-        <Button variant="outline" size="sm" onClick={liveQ.retry} disabled={liveQ.isFetching} className="ml-auto gap-2"><RefreshCw className="h-4 w-4" /> Refresh</Button>
+        <div className="ml-auto flex flex-wrap items-center gap-3"><Freshness updatedAt={liveQ.updatedAt} error={liveQ.refreshError} /><Button variant="outline" size="sm" onClick={liveQ.refresh} disabled={liveQ.isFetching || liveQ.refreshing} className="gap-2"><RefreshCw className={cn("h-4 w-4", liveQ.refreshing && "animate-spin")} /> Refresh</Button></div>
       </div>
 
       {/* Lifecycle cards */}
@@ -197,8 +198,9 @@ export function AggregatorBluedots({ orgName, district }: { orgName: string; dis
       {/* Coordinator drill-down */}
       <Dialog open={!!drill} onOpenChange={(o) => !o && setDrill(null)}>
         <DialogContent className="max-w-4xl">
-          <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · showing ${fmtN(drill.members.length)} real participants` : ""}</DialogDescription></DialogHeader>
-          <MemberTable members={drill?.members ?? []} avatarClasses={AV} months={MONTHS} />
+          <DialogHeader><DialogTitle>{drill?.name}</DialogTitle><DialogDescription>{drill ? `${fmtN(drill.dots)} Blue Dots · ${pctOf(drill.active, drill.dots)}% active · showing ${fmtN(membersQ.data?.length ?? 0)} real participants` : ""}</DialogDescription></DialogHeader>
+          <MemberLoading loading={membersQ.isPending} error={membersQ.isError} retry={() => void membersQ.refetch()} />
+          {membersQ.isSuccess && <MemberTable members={membersQ.data} avatarClasses={AV} months={MONTHS} />}
         </DialogContent>
       </Dialog>
     </div>
