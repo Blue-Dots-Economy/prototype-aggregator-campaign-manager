@@ -40,7 +40,7 @@ export async function loadDistrictRollup(instance: string, aggregatorId?: string
     const sb = cmClient();
     if (!sb || !instance) return { available: false };
     const [arms, users, applies, postings] = await Promise.all([
-      readAll<AggregatorRow & Record<string, unknown>>(sb, "bluedot_aggregators", "org_id,org_name,coordinator_org_id,coordinator_type,test_flag", "coordinator_org_id", instance),
+      readAll<AggregatorRow & Record<string, unknown>>(sb, "bluedot_aggregators", "org_id,org_name,coordinator_org_id,coordinator_org_name,coordinator_type,test_flag", "coordinator_org_id", instance),
       readAll<UserRow & Record<string, unknown>>(sb, "bluedot_users", "id,created_at,domains,onboarded_by_org_id", "id", instance),
       readAll<ApplyRow & Record<string, unknown>>(sb, "bluedot_item_actions", "action_id,source_item_owner,created_at", "action_id", instance, q => q.eq("action_type", "apply")),
       readAll<PostingRow & Record<string, unknown>>(sb, "bluedot_items", "item_id,created_by", "item_id", instance, q => q.eq("item_type", "job_posting_1.0").eq("lifecycle_status", "live")),

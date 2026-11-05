@@ -2,9 +2,30 @@ import { describe, expect, it } from "vitest";
 import { buildRollup, resolveAggregator, type AggregatorRow, type UserRow } from "./rollup.model";
 const now = Date.parse("2026-11-04T19:47:00Z");
 const daysAgo = (n: number) => new Date(now - n * 86400000).toISOString();
-const arm = (id: string, type = "seeker", parent = "parent", name = "Institution"): AggregatorRow => ({ org_id: parent, org_name: name, coordinator_org_id: id, coordinator_type: type, test_flag: false });
+const arm = (id: string, type = "seeker", parent = "parent", name = "Institution"): AggregatorRow => ({ org_id: parent, org_name: name, coordinator_org_id: id, coordinator_org_name: null, coordinator_type: type, test_flag: false });
 const user = (id: string, coord: string, kind = "seeker", age = 100): UserRow => ({ id, onboarded_by_org_id: coord, domains: [kind], created_at: daysAgo(age) });
 describe("real Blue Dots hierarchy", () => {
+  it("uses the trimmed coordinator organisation name and retains type metadata", () => {
+    const coord = buildRollup([{ ...arm("a"), coordinator_org_name: "  JFC Seeker Arm  " }], [], [], [], now)[0].coordinators[0];
+    expect(coord.name).toBe("JFC Seeker Arm");
+    expect(coord.type).toBe("seeker");
+    expect(coord.typeLabel).toBe("Seeker unit");
+  });
+  it("falls back to the existing type only for null or blank arm names", () => {
+    const coords = buildRollup([arm("a"), { ...arm("b", "provider"), coordinator_org_name: "   " }], [], [], [], now)[0].coordinators;
+    expect(coords.map(c => c.name)).toEqual(["Seeker unit", "Provider unit"]);
+  });
+  it("suffixes every colliding name with its type, leaving unique names unchanged", () => {
+    const name = "Joint Facilitation Centre Ghaziabad - JFC";
+    const arms = ["seeker", "provider", "service_provider"].map(type => ({ ...arm(type, type), coordinator_org_name: name }));
+    arms.push({ ...arm("unique"), coordinator_org_name: "Independent arm" });
+    const coords = buildRollup(arms, [], [], [], now)[0].coordinators;
+    expect(coords.map(c => c.name)).toEqual([`${name} (seeker)`, `${name} (provider)`, `${name} (service_provider)`, "Independent arm"]);
+  });
+  it("does not disambiguate names across different parent organisations", () => {
+    const arms = ["one", "two"].map(parent => ({ ...arm(parent, "seeker", parent), coordinator_org_name: "Shared arm name" }));
+    expect(buildRollup(arms, [], [], [], now).map(o => o.coordinators[0].name)).toEqual(["Shared arm name", "Shared arm name"]);
+  });
   it("combines arms by parent ID with unsuffixed institutional names and exact unit labels", () => {
     const orgs = buildRollup([arm("a"), arm("b", "provider"), arm("c", "service_provider")], [user("u", "a"), user("p", "b", "provider")], [], [], now);
     expect(orgs).toHaveLength(1);

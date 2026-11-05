@@ -1,10 +1,10 @@
 export type Lifecycle = "New" | "Active" | "At Risk" | "Inactive";
 export interface RollupMember { id: string; kind: "seeker" | "provider"; joined: string; applications: number; livePostings: number; lifecycle: Lifecycle }
 export interface RollupStats { dots: number; new7d: number; active: number; atRisk: number; inactive: number; applied: number }
-export interface RollupCoordinator { id: string; type: string; typeLabel: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[] }
+export interface RollupCoordinator { id: string; name: string; type: string; typeLabel: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[] }
 export interface RollupOrg { id: string; name: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[]; coordinators: RollupCoordinator[] }
 export type DistrictRollup = { available: true; instance: string; orgs: RollupOrg[]; nextOffset: number | null } | { available: false };
-export interface AggregatorRow { org_id: string; org_name: string | null; coordinator_org_id: string; coordinator_type: string | null; test_flag: boolean | null }
+export interface AggregatorRow { org_id: string; org_name: string | null; coordinator_org_id: string; coordinator_org_name: string | null; coordinator_type: string | null; test_flag: boolean | null }
 export interface UserRow { id: string; created_at: string; domains: string[] | null; onboarded_by_org_id: string | null }
 export interface ApplyRow { action_id: string; source_item_owner: string; created_at: string }
 export interface PostingRow { item_id: string; created_by: string }
@@ -17,10 +17,10 @@ export const typeLabelFor = (type?: string | null) => type ? labels[type] ?? typ
 export function buildRollup(arms: AggregatorRow[], users: UserRow[], applies: ApplyRow[], postings: PostingRow[], now = Date.now()): RollupOrg[] {
   const excludedParents = new Set(arms.filter(a => a.test_flag === true || /test_marker|test\b|temp\s*-\s*sp|aryan test/i.test(a.org_name ?? "")).map(a => a.org_id));
   const excludedArms = new Set(arms.filter(a => excludedParents.has(a.org_id)).map(a => a.coordinator_org_id));
-  const coordInfo = new Map<string, { orgId: string; orgName: string; type: string }>();
+  const coordInfo = new Map<string, { orgId: string; orgName: string; coordName: string | undefined; type: string }>();
   for (const a of arms) {
     if (!a.coordinator_org_id || !a.org_id || excludedParents.has(a.org_id)) continue;
-    coordInfo.set(a.coordinator_org_id, { orgId: a.org_id, orgName: a.org_name?.trim() || a.org_id, type: a.coordinator_type ?? "" });
+    coordInfo.set(a.coordinator_org_id, { orgId: a.org_id, orgName: a.org_name?.trim() || a.org_id, coordName: a.coordinator_org_name?.trim(), type: a.coordinator_type ?? "" });
   }
   const orgs = new Map<string, RollupOrg>();
   const coords = new Map<string, RollupCoordinator>();
@@ -34,7 +34,7 @@ export function buildRollup(arms: AggregatorRow[], users: UserRow[], applies: Ap
     }
     let coord = coords.get(coordId);
     if (!coord) {
-      coord = { id: coordId, type: info?.type ?? "", typeLabel: typeLabelFor(info?.type), seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [] };
+      coord = { id: coordId, name: info?.coordName || typeLabelFor(info?.type), type: info?.type ?? "", typeLabel: typeLabelFor(info?.type), seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [] };
       coords.set(coordId, coord);
       org.coordinators.push(coord);
     }
@@ -80,7 +80,14 @@ export function buildRollup(arms: AggregatorRow[], users: UserRow[], applies: Ap
     }
   }
   const dots = (o: RollupOrg | RollupCoordinator) => o.seekers.dots + o.providers.dots;
-  for (const o of orgs.values()) o.coordinators.sort((a, b) => dots(b) - dots(a));
+  for (const o of orgs.values()) {
+    const nameCounts = new Map<string, number>();
+    for (const coord of o.coordinators) nameCounts.set(coord.name, (nameCounts.get(coord.name) ?? 0) + 1);
+    for (const coord of o.coordinators) {
+      if ((nameCounts.get(coord.name) ?? 0) >= 2) coord.name = `${coord.name} (${coord.type})`;
+    }
+    o.coordinators.sort((a, b) => dots(b) - dots(a));
+  }
   return [...orgs.values()].sort((a, b) => dots(b) - dots(a));
 }
 
