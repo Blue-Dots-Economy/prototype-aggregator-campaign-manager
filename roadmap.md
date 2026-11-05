@@ -1,5 +1,9 @@
 # Roadmap
 
+- [ ] Mirror Blue Dots into local Cloud, add SQL rollup and four-hour authenticated sync.
+- [ ] Switch persona counts to fast rollup and participant drill-downs to lazy mirror reads; show freshness and refresh.
+- [ ] Compare live counts and timings, test toggles/drills, and delete temporary verification accounts.
+
 - [x] Audit and fix participant-view totals, ordering, attention and network/coverage in district and owner views.
 - [x] Test toggle rules and verify all three live states with temporary accounts; delete accounts afterward.
 
