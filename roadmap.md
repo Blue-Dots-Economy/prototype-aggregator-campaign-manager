@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Use live coordinator organisation names with same-org collision suffixes; test district/owner and delete temporary accounts.
+- [x] Use live coordinator organisation names with same-org collision suffixes; test district/owner and delete temporary accounts.
 
 - [x] Verify live Blue Dots hierarchy and replace all three persona samples.
 - [x] Test hierarchy/lifecycle rules and verify district/owner drill-downs; delete temporary accounts.
