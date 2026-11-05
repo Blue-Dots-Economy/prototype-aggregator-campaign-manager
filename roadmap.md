@@ -1,7 +1,7 @@
 # Roadmap
 
-- [ ] Audit and fix participant-view totals, ordering, attention and network/coverage in district and owner views.
-- [ ] Test toggle rules and verify all three live states with temporary accounts; delete accounts afterward.
+- [x] Audit and fix participant-view totals, ordering, attention and network/coverage in district and owner views.
+- [x] Test toggle rules and verify all three live states with temporary accounts; delete accounts afterward.
 
 - [x] Use live coordinator organisation names with same-org collision suffixes; test district/owner and delete temporary accounts.
 
