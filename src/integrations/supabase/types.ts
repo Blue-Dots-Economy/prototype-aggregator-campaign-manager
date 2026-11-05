@@ -1280,6 +1280,7 @@ export type Database = {
           org_id: string
           org_name: string
           p_active: number
+          p_applied: number
           p_inactive: number
           p_live_postings: number
           p_new: number
