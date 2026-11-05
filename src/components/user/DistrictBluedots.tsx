@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useLiveRollup, nodeFor, LiveState, MemberTable, type LiveNode } from "./live-rollup";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { coverageFor, totalsFor } from "@/lib/rollup.view";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
@@ -47,21 +48,21 @@ export function DistrictBluedots({ district }: { district: string }) {
   const liveQ = useLiveRollup(instance);
   const aggs = useMemo<AggNode[]>(() => liveQ.orgs.map(org => ({ ...nodeFor(org, view), coordinators: org.coordinators.map(c => nodeFor(c, view)) })), [liveQ.data, view]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [drill, setDrill] = useState<Node | null>(null);
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "activity", dir: "desc" });
-
-  const t = useMemo(() => {
-    const o = { dots: 0, new7d: 0, active: 0, inactive: 0, applied: 0, coords: 0 };
-    for (const a of aggs) { o.dots += a.dots; o.new7d += a.new7d; o.active += a.active; o.inactive += a.inactive; o.applied += a.applied; o.coords += a.coordinators.length; }
-    return o;
-  }, [aggs]);
+  const [drillId, setDrillId] = useState<string | null>(null);
+  const drill = aggs.flatMap(a => [a, ...a.coordinators]).find(n => n.id === drillId) ?? null;
+  const setDrill = (n: Node | null) => setDrillId(n?.id ?? null);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "dots", dir: "desc" });
+  const t = useMemo(() => totalsFor(aggs), [aggs]);
+  const orgCoverage = coverageFor(aggs);
+  const coordCoverage = coverageFor(aggs.flatMap(a => a.coordinators));
+  const armCount = aggs.reduce((sum, a) => sum + a.coordinators.length, 0);
   const realTotal = t.dots;
-  const atRisk = aggs.reduce((a, x) => a + x.atRisk, 0);
+  const atRisk = t.atRisk;
   const lcVal: Record<string, number> = { new7d: t.new7d, active: t.active, atRiskN: atRisk, inactive: t.inactive };
 
   const attention = useMemo(() => {
     const quietCoords = aggs.flatMap((a) => a.coordinators).filter((c) => c.quiet);
-    const worst = [...aggs].sort((a, b) => a.activity - b.activity)[0];
+    const worst = aggs.filter(a => a.dots > 0).sort((a, b) => a.activity - b.activity)[0];
     const items: { tone: "danger" | "warn"; title: string; sub: string }[] = [];
     if (worst) items.push({ tone: "danger", title: `${worst.name} — activity ${worst.activity}`, sub: `lowest in district · ${pctOf(worst.inactive, worst.dots)}% inactive` });
     if (quietCoords.length) items.push({ tone: "warn", title: `${quietCoords.length} coordinator${quietCoords.length > 1 ? "s" : ""} · 0 new onboards`, sub: quietCoords.slice(0, 2).map((c) => c.name).join(", ") + (quietCoords.length > 2 ? "…" : "") });
@@ -125,7 +126,7 @@ export function DistrictBluedots({ district }: { district: string }) {
         <div className="flex items-center gap-2">
           <div role="group" aria-label="Participant type" className="inline-flex rounded-lg bg-muted p-1">
             {(["all", "seeker", "provider"] as const).map((v) => (
-              <Button variant="ghost" size="sm" key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
+              <Button variant="ghost" size="sm" key={v} type="button" onClick={() => { setView(v); setSort({ key: "dots", dir: "desc" }); }} aria-pressed={view === v}
                 className={cn("rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors", view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                 {v}
               </Button>
@@ -176,9 +177,9 @@ export function DistrictBluedots({ district }: { district: string }) {
       <div>
         <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Network</div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <MetricTile label="Aggregator Owners" value={fmtN(aggs.length)} caption="Partner organisations" Icon={Building2} />
-          <MetricTile label="Coordinators" value={fmtN(t.coords)} caption="Across all aggregators" Icon={Layers} />
-          <MetricTile label="Avg Blue Dots / Coordinator" value={fmtN(Math.round(realTotal / Math.max(1, t.coords)))} caption="Managed each" Icon={Users} />
+          <MetricTile label="Aggregator Owners" value={fmtN(orgCoverage.count)} caption={`With ${typeLabel.toLowerCase()}`} Icon={Building2} />
+          <MetricTile label="Coordinators" value={fmtN(coordCoverage.count)} caption={`With ${typeLabel.toLowerCase()}`} Icon={Layers} />
+          <MetricTile label="Avg Blue Dots / Coordinator" value={fmtN(coordCoverage.average)} caption="Per unit with participants" Icon={Users} />
         </div>
       </div>
 
@@ -188,7 +189,7 @@ export function DistrictBluedots({ district }: { district: string }) {
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">By organisation</div>
-          <div className="text-xs text-muted-foreground">{aggs.length} organisations · {t.coords} coordinators</div>
+          <div className="text-xs text-muted-foreground">{aggs.length} organisations · {armCount} coordinators</div>
         </div>
         <div className="rounded-xl border bg-card overflow-x-auto">
           <table className="w-full min-w-[840px] text-sm">

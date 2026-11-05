@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { fetchDistrictRollup, statsFor, type RollupOrg, type RollupCoordinator, type RollupMember } from "@/lib/rollup.functions";
+import { fetchDistrictRollup, type RollupMember } from "@/lib/rollup.functions";
+export { nodeFor, type LiveNode, type ParticipantView } from "@/lib/rollup.view";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,6 @@ export function useLiveRollup(instance: string, aggregatorId?: string, coordinat
   const available = !!query.data && query.data.pages.every(p => p.available);
   const orgs = query.data?.pages.flatMap(p => p.available ? p.orgs : []) ?? [];
   return { ...query, orgs, available, loading: query.isPending || (query.hasNextPage && !query.isError), retry: () => void query.refetch() };
-}
-export type ParticipantView = "all" | "seeker" | "provider";
-export interface LiveNode { id: string; name: string; dots: number; new7d: number; active: number; atRisk: number; inactive: number; applied: number; activity: number; quiet: boolean; members: RollupMember[] }
-export function nodeFor(o: RollupOrg | RollupCoordinator, view: ParticipantView): LiveNode {
-  const s = statsFor(o, view);
-  const activity = s.dots ? Math.max(6, Math.min(100, Math.round((s.active / s.dots / 0.15) * 55 + (s.new7d / s.dots / 0.045) * 35 + 6))) : 0;
-  return { ...s, id: o.id, name: o.name, activity, quiet: s.new7d === 0, members: o.members.filter(m => view === "all" || m.kind === view) };
 }
 export function LiveState({ loading, retry, empty }: { loading: boolean; retry: () => void; empty?: string }) {
   return <section className="space-y-6"><h1 className="text-3xl font-bold">My Blue Dots</h1>{loading ? <div aria-label="Loading Blue Dots" className="space-y-4"><Skeleton className="h-24 w-full" /><div className="grid grid-cols-2 gap-4"><Skeleton className="h-48" /><Skeleton className="h-48" /></div><Skeleton className="h-80 w-full" /></div> : <div className="py-16 text-center space-y-4"><p className="text-muted-foreground">{empty ?? "Couldn't load live Blue Dots data — Retry"}</p><Button variant="outline" onClick={retry}>Retry</Button></div>}</section>;
