@@ -106,7 +106,7 @@ export function resolveAggregator(orgs: RollupOrg[], id: string): RollupOrg[] {
 
 export interface ArmCounts extends Omit<AggregatorRow, "test_flag"> {
   s_total: number; s_new: number; s_active: number; s_at_risk: number; s_inactive: number; s_applied: number;
-  p_total: number; p_new: number; p_active: number; p_inactive: number; p_live_postings: number;
+  p_total: number; p_new: number; p_active: number; p_inactive: number; p_live_postings: number; p_applied?: number;
   updated_at?: string | null;
 }
 /** Count-only SQL projection; no participant rows travel with the initial view. */
@@ -121,7 +121,7 @@ export function rollupFromCounts(rows: ArmCounts[]): RollupOrg[] {
     const seekers = { dots: Number(r.s_total), new7d: Number(r.s_new), active: Number(r.s_active), atRisk: Number(r.s_at_risk), inactive: Number(r.s_inactive), applied: Number(r.s_applied) };
     const providers = { dots: Number(r.p_total), new7d: Number(r.p_new), active: Number(r.p_active), atRisk: 0, inactive: Number(r.p_inactive), applied: 0 };
     // Provider applied counts participants with live postings, including New participants.
-    providers.applied = Number((r as ArmCounts & { p_applied?: number }).p_applied ?? r.p_active);
+    providers.applied = Number(r.p_applied ?? r.p_active);
     const type = r.coordinator_type ?? "";
     org.coordinators.push({ id: r.coordinator_org_id, name: r.coordinator_org_name?.trim() || typeLabelFor(type), type, typeLabel: typeLabelFor(type), seekers, providers, livePostings: Number(r.p_live_postings), members: [] });
     for (const key of Object.keys(seekers) as (keyof RollupStats)[]) { org.seekers[key] += seekers[key]; org.providers[key] += providers[key]; }
