@@ -3,7 +3,7 @@ export interface RollupMember { id: string; kind: "seeker" | "provider"; joined:
 export interface RollupStats { dots: number; new7d: number; active: number; atRisk: number; inactive: number; applied: number }
 export interface RollupCoordinator { id: string; name: string; type: string; typeLabel: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[] }
 export interface RollupOrg { id: string; name: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[]; coordinators: RollupCoordinator[] }
-export type DistrictRollup = { available: true; instance: string; orgs: RollupOrg[]; nextOffset: number | null } | { available: false };
+export type DistrictRollup = { available: true; instance: string; orgs: RollupOrg[]; nextOffset: number | null; updatedAt?: string | null } | { available: false };
 export interface AggregatorRow { org_id: string; org_name: string | null; coordinator_org_id: string; coordinator_org_name: string | null; coordinator_type: string | null; test_flag: boolean | null }
 export interface UserRow { id: string; created_at: string; domains: string[] | null; onboarded_by_org_id: string | null }
 export interface ApplyRow { action_id: string; source_item_owner: string; created_at: string }
@@ -102,4 +102,37 @@ export function buildRollup(arms: AggregatorRow[], users: UserRow[], applies: Ap
 export function resolveAggregator(orgs: RollupOrg[], id: string): RollupOrg[] {
   const org = orgs.find(o => o.id === id || o.coordinators.some(c => c.id === id));
   return org ? [org] : [];
+}
+
+export interface ArmCounts extends Omit<AggregatorRow, "test_flag"> {
+  s_total: number; s_new: number; s_active: number; s_at_risk: number; s_inactive: number; s_applied: number;
+  p_total: number; p_new: number; p_active: number; p_inactive: number; p_live_postings: number;
+  updated_at?: string | null;
+}
+/** Count-only SQL projection; no participant rows travel with the initial view. */
+export function rollupFromCounts(rows: ArmCounts[]): RollupOrg[] {
+  const orgs = new Map<string, RollupOrg>();
+  for (const r of rows) {
+    let org = orgs.get(r.org_id);
+    if (!org) {
+      org = { id: r.org_id, name: r.org_name?.trim() || r.org_id, seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [], coordinators: [] };
+      orgs.set(r.org_id, org);
+    }
+    const seekers = { dots: Number(r.s_total), new7d: Number(r.s_new), active: Number(r.s_active), atRisk: Number(r.s_at_risk), inactive: Number(r.s_inactive), applied: Number(r.s_applied) };
+    const providers = { dots: Number(r.p_total), new7d: Number(r.p_new), active: Number(r.p_active), atRisk: 0, inactive: Number(r.p_inactive), applied: 0 };
+    // Provider applied counts participants with live postings, including New participants.
+    providers.applied = Number((r as ArmCounts & { p_applied?: number }).p_applied ?? r.p_active);
+    const type = r.coordinator_type ?? "";
+    org.coordinators.push({ id: r.coordinator_org_id, name: r.coordinator_org_name?.trim() || typeLabelFor(type), type, typeLabel: typeLabelFor(type), seekers, providers, livePostings: Number(r.p_live_postings), members: [] });
+    for (const key of Object.keys(seekers) as (keyof RollupStats)[]) { org.seekers[key] += seekers[key]; org.providers[key] += providers[key]; }
+    org.livePostings += Number(r.p_live_postings);
+  }
+  const dots = (o: RollupOrg | RollupCoordinator) => o.seekers.dots + o.providers.dots;
+  for (const o of orgs.values()) {
+    const names = new Map<string, number>();
+    for (const c of o.coordinators) names.set(c.name, (names.get(c.name) ?? 0) + 1);
+    for (const c of o.coordinators) if ((names.get(c.name) ?? 0) > 1) c.name += ` (${c.type})`;
+    o.coordinators.sort((a, b) => dots(b) - dots(a));
+  }
+  return [...orgs.values()].sort((a, b) => dots(b) - dots(a));
 }
