@@ -1010,7 +1010,6 @@ function CsvBluedots() {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    </TableCell>
                   </TableRow>
                 );
               })}
