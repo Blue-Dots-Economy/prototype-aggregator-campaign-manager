@@ -3,8 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Users,
   UserPlus,
-  AlertTriangle,
-  PauseCircle,
   Copy,
   CheckCircle2,
   Send,
@@ -78,6 +76,7 @@ import { useAuth } from "@/auth/context";
 import { DistrictBluedots } from "@/components/user/DistrictBluedots";
 import { AggregatorBluedots } from "@/components/user/AggregatorBluedots";
 import { CoordinatorBluedots } from "@/components/user/CoordinatorBluedots";
+import { StageCell } from "@/components/user/StageCell";
 
 export const Route = createFileRoute("/user-level-analysis")({
   head: () => ({ meta: [
@@ -90,6 +89,14 @@ export const Route = createFileRoute("/user-level-analysis")({
   ] }),
   component: UserLevelAnalysis,
 });
+
+const SIGNALS = ["Strong", "Moderate", "Weak"] as const;
+const LIFECYCLE_COLS: { status: Seeker["status"]; description: string }[] = [
+  { status: "New", description: "Profile age ≤ 7 days" },
+  { status: "Active", description: "Last applied ≤ 30 days" },
+  { status: "At Risk", description: "Profile > 7d, last applied 31–90d" },
+  { status: "Inactive", description: "Last applied > 90 days or never" },
+];
 
 const STATUS_STYLES: Record<Seeker["status"], string> = {
   New: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
@@ -387,48 +394,6 @@ function CsvBluedots() {
   }, [dateScopedSeekers, search, statusFilter, profileFilter, appliedFilters]);
 
 
-  const lifecycle = [
-    {
-      label: "New",
-      value: stats.byStatus.New,
-      description: "Profile age ≤ 7 days",
-      icon: UserPlus,
-      accent: "from-emerald-50 to-white",
-      iconBg: "bg-card border border-emerald-500/30",
-      iconColor: "text-emerald-600",
-      valueColor: "text-emerald-600",
-    },
-    {
-      label: "Active",
-      value: stats.byStatus.Active,
-      description: "Last applied ≤ 30 days",
-      icon: Users,
-      accent: "from-blue-50 to-white",
-      iconBg: "bg-card border border-blue-500/30",
-      iconColor: "text-blue-600",
-      valueColor: "text-blue-600",
-    },
-    {
-      label: "At Risk",
-      value: stats.byStatus["At Risk"],
-      description: "Profile > 7d, last applied 31–90d",
-      icon: AlertTriangle,
-      accent: "from-amber-50 to-white",
-      iconBg: "bg-card border border-amber-500/30",
-      iconColor: "text-amber-500",
-      valueColor: "text-amber-600",
-    },
-    {
-      label: "Inactive",
-      value: stats.byStatus.Inactive,
-      description: "Last applied > 90 days or never",
-      icon: PauseCircle,
-      accent: "from-rose-50 to-white",
-      iconBg: "bg-card border border-rose-500/30",
-      iconColor: "text-rose-500",
-      valueColor: "text-rose-600",
-    },
-  ];
 
   return (
     <div className="space-y-6">
@@ -588,62 +553,46 @@ function CsvBluedots() {
         </div>
       </div>
 
-      {/* Radius metrics banner */}
-      <div className="rounded-xl border bg-card p-5 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 flex-1">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-violet-500/15 flex items-center justify-center text-violet-600 dark:text-violet-400">
-              <Search className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Avg Job Search Radius</div>
-              <div className="text-xl font-semibold text-muted-foreground">Coming soon</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <Send className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Avg Job Application Radius</div>
-              <div className="text-xl font-semibold text-muted-foreground">Coming soon</div>
-            </div>
-          </div>
-        </div>
+      <div className="flex justify-end">
         <Button variant="outline" className="gap-2" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
 
-      {/* Lifecycle cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {lifecycle.map((c) => {
-          const Icon = c.icon;
-          const breakdown = stats.signalByStatus[c.label as Seeker["status"]];
-          const pct = (n: number) => (c.value ? Math.round((n / c.value) * 100) : 0);
-          return (
-            <div key={c.label} className={`rounded-xl border p-5 bg-gradient-to-br ${c.accent}`}>
-              <div className={`h-10 w-10 rounded-lg ${c.iconBg} flex items-center justify-center ${c.iconColor}`}>
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className={`mt-6 text-5xl font-bold ${c.valueColor}`}>{c.value.toLocaleString()}</div>
-              <div className="mt-3 text-base font-semibold">{c.label}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{c.description}</div>
-              <div className="mt-2 text-xs text-muted-foreground space-y-0.5">
-                <div>
-                  Strong {breakdown.Strong.toLocaleString()} ({pct(breakdown.Strong)}%)
-                </div>
-                <div>
-                  Moderate {breakdown.Moderate.toLocaleString()} ({pct(breakdown.Moderate)}%)
-                </div>
-                <div>
-                  Weak {breakdown.Weak.toLocaleString()} ({pct(breakdown.Weak)}%)
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      {/* Signal × lifecycle matrix */}
+      <div className="rounded-xl border bg-card overflow-x-auto">
+        <table className="w-full text-sm tabular-nums">
+          <thead>
+            <tr className="border-b">
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Signal \ Status</th>
+              {LIFECYCLE_COLS.map((c) => (
+                <th key={c.status} className="p-3 text-right" title={c.description}>
+                  <Badge variant="outline" className={`rounded-full ${STATUS_STYLES[c.status]}`}>{c.status}</Badge>
+                </th>
+              ))}
+              <th className="p-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SIGNALS.map((sig) => (
+              <tr key={sig} className="border-b">
+                <td className="p-3 font-medium">{sig}</td>
+                {LIFECYCLE_COLS.map((c) => (
+                  <td key={c.status} className="p-3 text-right">{stats.signalByStatus[c.status][sig].toLocaleString()}</td>
+                ))}
+                <td className="p-3 text-right font-semibold">{stats.signalCounts[sig].toLocaleString()}</td>
+              </tr>
+            ))}
+            <tr className="bg-muted/40">
+              <td className="p-3 font-semibold">Total</td>
+              {LIFECYCLE_COLS.map((c) => (
+                <td key={c.status} className="p-3 text-right font-semibold">{stats.byStatus[c.status].toLocaleString()}</td>
+              ))}
+              <td className="p-3 text-right font-bold">{stats.total.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       {/* Profiles & Users metrics */}
@@ -964,9 +913,9 @@ function CsvBluedots() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead rowSpan={2} className="align-middle">Seeker</TableHead>
-                <TableHead rowSpan={2} className="align-middle">Joined</TableHead>
-                <TableHead rowSpan={2} className="align-middle">
+                <TableHead>Seeker</TableHead>
+                <TableHead>Joined</TableHead>
+                <TableHead>
                   <span className="inline-flex items-center gap-1">
                     Profile Status
                     <button
@@ -979,22 +928,11 @@ function CsvBluedots() {
                     </button>
                   </span>
                 </TableHead>
-                <TableHead colSpan={4} className="text-center border-l">Applied</TableHead>
-                <TableHead colSpan={4} className="text-center border-l">Pre-shortlisted</TableHead>
-                <TableHead rowSpan={2} className="align-middle border-l">
+                <TableHead className="border-l">Applied</TableHead>
+                <TableHead className="border-l">Pre-shortlisted</TableHead>
+                <TableHead className="border-l">
                   User Status
                 </TableHead>
-                <TableHead rowSpan={2} className="align-middle">Recommended Action</TableHead>
-              </TableRow>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="text-xs uppercase tracking-wider border-l">Total</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Shortlisted</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Rejected</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Pending</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider border-l">Total</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Accepted</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Rejected</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Pending</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1037,14 +975,20 @@ function CsvBluedots() {
                       </div>
                     </TableCell>
 
-                    <TableCell className="border-l">{p.applications}</TableCell>
-                    <TableCell>{p.shortlisted}</TableCell>
-                    <TableCell>{p.rejected}</TableCell>
-                    <TableCell>{pending}</TableCell>
-                    <TableCell className="border-l">0</TableCell>
-                    <TableCell>0</TableCell>
-                    <TableCell>0</TableCell>
-                    <TableCell>0</TableCell>
+                    <TableCell className="border-l">
+                      <StageCell title="Applied" total={p.applications} segments={[
+                        { label: "Shortlisted", value: p.shortlisted, barClass: "bg-emerald-500" },
+                        { label: "Rejected", value: p.rejected, barClass: "bg-rose-500" },
+                        { label: "Pending", value: pending, barClass: "bg-amber-500" },
+                      ]} />
+                    </TableCell>
+                    <TableCell className="border-l">
+                      <StageCell title="Pre-shortlisted" total={0} segments={[
+                        { label: "Accepted", value: 0, barClass: "bg-emerald-500" },
+                        { label: "Rejected", value: 0, barClass: "bg-rose-500" },
+                        { label: "Pending", value: 0, barClass: "bg-amber-500" },
+                      ]} />
+                    </TableCell>
                     <TableCell className="border-l">
                       <TooltipProvider>
                         <Tooltip>
@@ -1066,20 +1010,12 @@ function CsvBluedots() {
                         </Tooltip>
                       </TooltipProvider>
                     </TableCell>
-                    <TableCell>
-                      <span
-                        className="text-xs px-3 py-1 rounded-full border bg-muted/30 text-muted-foreground italic cursor-not-allowed"
-                        title="Recommended actions are coming soon"
-                      >
-                        Coming soon
-                      </span>
-                    </TableCell>
                   </TableRow>
                 );
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-sm text-muted-foreground py-10">
+                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-10">
                     No seekers match your filters.
                   </TableCell>
                 </TableRow>
