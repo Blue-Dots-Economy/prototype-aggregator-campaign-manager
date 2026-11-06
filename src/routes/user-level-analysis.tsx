@@ -3,8 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Users,
   UserPlus,
-  AlertTriangle,
-  PauseCircle,
   Copy,
   CheckCircle2,
   Send,
