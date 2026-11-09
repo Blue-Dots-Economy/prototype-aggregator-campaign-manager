@@ -18,6 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { listProgramLiveBatches, getBatchLiveDetail, type LiveBatch } from "@/lib/raya-live.functions";
+import { useAuth } from "@/auth/context";
 import { rayaStopBatch } from "@/lib/raya.functions";
 import { exportBatchToStaging } from "@/lib/raya-export.functions";
 import { cn } from "@/lib/utils";
@@ -324,6 +325,8 @@ function Meta({ label, value, mono }: { label: string; value: string; mono?: boo
   return (<div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">{label}</span><span className={`truncate text-foreground ${mono ? "font-mono text-[11px]" : ""}`}>{value}</span></div>);
 }
 function LiveBatchDetailDialog({ batch, program, onClose }: { batch: LiveBatch | null; program: "kkb"|"dkb"; onClose: () => void }) {
+  const { session } = useAuth();
+  const readOnly = session?.role === "jfc_readonly";
   const detailFn = useServerFn(getBatchLiveDetail);
   const stopFn = useServerFn(rayaStopBatch);
   const exportFn = useServerFn(exportBatchToStaging);
@@ -356,7 +359,7 @@ function LiveBatchDetailDialog({ batch, program, onClose }: { batch: LiveBatch |
             <div><h4 className="mb-2 text-sm font-semibold">Recent calls</h4>{!d || d.recent.length === 0 ? <p className="text-xs text-muted-foreground">No recent calls yet.</p> : (<div className="overflow-hidden rounded-md border"><Table><TableHeader><TableRow><TableHead>Phone</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Duration</TableHead></TableRow></TableHeader><TableBody>{d.recent.map((c, i) => <TableRow key={`${c.phone}-${i}`}><TableCell className="font-mono text-xs">{maskPhone(c.phone)}</TableCell><TableCell className="text-xs">{c.status}</TableCell><TableCell className="text-right tabular-nums text-xs">{c.duration > 0 ? `${c.duration}s` : "—"}</TableCell></TableRow>)}</TableBody></Table></div>)}</div>
           </div>
         )}
-        {batch && (
+        {batch && !readOnly && (
           <div className="mt-3 flex flex-wrap items-start justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
             <span className="inline-flex items-center gap-1.5"><ShieldAlert className="h-3.5 w-3.5 shrink-0" /> Writing to staging sheet for QC — master sheets are not modified.</span>
             <div className="flex items-center gap-2">{exportMut.data?.sheetUrl && <a href={exportMut.data.sheetUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand underline">open staging <ExternalLink className="h-3 w-3" /></a>}<Button size="sm" variant="outline" disabled={exportMut.isPending} onClick={() => exportMut.mutate()}>{exportMut.isPending ? "Exporting…" : "Export results to staging"}</Button></div>
@@ -364,7 +367,7 @@ function LiveBatchDetailDialog({ batch, program, onClose }: { batch: LiveBatch |
         )}
         <DialogFooter className="mt-4 flex items-center justify-between gap-2 sm:justify-between">
           <p className="text-[11px] text-muted-foreground">Auto-refresh every 12s while tab is visible.</p>
-          {isRunning && (confirmStop ? (<div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">Stop this campaign?</span><Button size="sm" variant="ghost" onClick={() => setConfirmStop(false)}>Cancel</Button><Button size="sm" variant="destructive" disabled={stopMut.isPending} onClick={() => stopMut.mutate()}>{stopMut.isPending ? "Stopping…" : "Confirm stop"}</Button></div>) : <Button size="sm" variant="destructive" onClick={() => setConfirmStop(true)}>Stop campaign</Button>)}
+          {isRunning && !readOnly && (confirmStop ? (<div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">Stop this campaign?</span><Button size="sm" variant="ghost" onClick={() => setConfirmStop(false)}>Cancel</Button><Button size="sm" variant="destructive" disabled={stopMut.isPending} onClick={() => stopMut.mutate()}>{stopMut.isPending ? "Stopping…" : "Confirm stop"}</Button></div>) : <Button size="sm" variant="destructive" onClick={() => setConfirmStop(true)}>Stop campaign</Button>)}
         </DialogFooter>
       </DialogContent>
     </Dialog>

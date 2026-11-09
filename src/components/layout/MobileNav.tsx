@@ -159,7 +159,9 @@ export function MobileNav() {
           { to: "/", label: "Campaign Overview", icon: LayoutDashboard },
         ] as NavItem[],
       }]
-    : GROUPS;
+    : session?.role === "jfc_readonly"
+      ? GROUPS.map(g => ({ ...g, items: g.items.filter(item => item.to !== "/launch") }))
+      : GROUPS;
 
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const initial = new Set<string>();
@@ -244,7 +246,7 @@ export function MobileNav() {
           ))}
         </nav>
 
-        {!isEcosystem && (
+        {!isEcosystem && session?.role !== "jfc_readonly" && (
           <div className="border-t px-3 py-2">
             {(() => {
               const item = SETTINGS;
