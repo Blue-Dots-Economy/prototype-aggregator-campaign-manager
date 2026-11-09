@@ -4,6 +4,7 @@ import type { Role } from "@/auth/context";
 export const ROLE_ROUTES: Record<Role, string[]> = {
   admin: ["*"],
   jfc: ["/user-level-analysis", "/", "/campaigns", "/review", "/launch", "/ecosystem-view", "/campaign-requests", "/request-campaign", "/cm-test"],
+  jfc_readonly: ["/user-level-analysis", "/", "/campaigns", "/review", "/ecosystem-view"],
   coordinator: ["/user-level-analysis", "/", "/campaigns", "/review", "/request-campaign"],
   owner: ["/user-level-analysis", "/", "/campaigns", "/review"],
   ecosystem: ["/ecosystem-view", "/user-level-analysis", "/"],
@@ -13,6 +14,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
 export const DEFAULT_LANDING: Record<Role, string> = {
   admin: "/user-level-analysis",
   jfc: "/",
+  jfc_readonly: "/user-level-analysis",
   coordinator: "/user-level-analysis",
   owner: "/user-level-analysis",
   ecosystem: "/ecosystem-view",

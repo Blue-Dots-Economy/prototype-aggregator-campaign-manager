@@ -28,6 +28,8 @@ export const fetchStoredCsv = createServerFn({ method: "GET" }).handler(
 export const uploadStoredCsv = createServerFn({ method: "POST" })
   .inputValidator((d: { text: string; name: string; rows: number }) => d)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const meta = { name: data.name, uploadedAt: new Date().toISOString(), rows: data.rows };
@@ -45,6 +47,8 @@ export const uploadStoredCsv = createServerFn({ method: "POST" })
   });
 
 export const clearStoredCsv = createServerFn({ method: "POST" }).handler(async (): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.storage.from(BUCKET).remove([OBJECT, META_OBJECT]);

@@ -31,6 +31,8 @@ export interface UpsertAppUserInput {
 export const upsertAppUser = createServerFn({ method: "POST" })
   .inputValidator((d: { user: UpsertAppUserInput }) => d)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const u = data.user;
     if (!u.email || !u.role) throw new Error("Email and role are required.");
     const { error } = await sb().rpc("upsert_app_user", {
@@ -46,6 +48,8 @@ export const upsertAppUser = createServerFn({ method: "POST" })
 export const setAppUserActive = createServerFn({ method: "POST" })
   .inputValidator((d: { email: string; active: boolean }) => d)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const { error } = await sb().from("app_users")
       .update({ active: data.active, updated_at: new Date().toISOString() })
       .eq("email", data.email.trim().toLowerCase());

@@ -20,6 +20,14 @@ import { cn } from "@/lib/utils";
 import { playSwoosh } from "@/lib/sfx";
 
 export const Route = createFileRoute("/review_/$callId")({
+  head: () => ({ meta: [
+    { title: "Call Transcript | Blue Dots Dashboard" },
+    { name: "description", content: "Read an individual Blue Dots call transcript, recording and review history." },
+    { property: "og:title", content: "Call Transcript | Blue Dots Dashboard" },
+    { property: "og:description", content: "Read an individual Blue Dots call transcript, recording and review history." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   validateSearch: (s: Record<string, unknown>) => ({ bulk: typeof s.bulk === "string" ? s.bulk : undefined }),
   component: TranscriptReview,
 });
@@ -154,6 +162,7 @@ function TranscriptReview() {
   const { programId } = useProgram();
   const dataset = programId;
   const { session } = useAuth();
+  const readOnly = session?.role === "jfc_readonly";
   const reviewerEmail = (session?.email || "").toLowerCase();
   const isAdmin = reviewerEmail === "admin@bluedots.com";
 
@@ -226,6 +235,7 @@ function TranscriptReview() {
   const submitFn = useServerFn(submitReview);
 
   async function submit() {
+    if (readOnly) return;
     if (!call) return;
     if (isAdmin) { toast.error("The shared admin account can't submit reviews.", { description: "Sign in with your own email to review." }); return; }
     if (issues.length === 0) { toast.error("Select at least one issue (or 'No Issues')."); return; }
@@ -450,6 +460,7 @@ function TranscriptReview() {
             </div>
           )}
 
+          {!readOnly && <>
           <div className="rounded-xl border border-border bg-card p-4">
             <Label className="text-sm font-semibold">Issues detected</Label>
             <div className="mt-3 space-y-2">
@@ -510,6 +521,7 @@ function TranscriptReview() {
               {submitting ? "Submitting…" : isAdmin ? "Reviewing disabled for admin" : bulkMode ? "Submit & next call" : "Submit Review"}
             </Button>
           </div>
+          </>}
         </aside>
       </div>
     </div>

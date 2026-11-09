@@ -12,6 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/review")({
+  head: () => ({ meta: [
+    { title: "Call Review | Blue Dots Dashboard" },
+    { name: "description", content: "Browse Blue Dots call recordings, transcripts and existing reviews." },
+    { property: "og:title", content: "Call Review | Blue Dots Dashboard" },
+    { property: "og:description", content: "Browse Blue Dots call recordings, transcripts and existing reviews." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   validateSearch: (s: Record<string, unknown>) => ({ prefill: typeof s.prefill === "string" ? s.prefill : undefined }),
   component: ReviewHub,
 });
@@ -333,14 +341,14 @@ function ReviewHub() {
               </button>
             ))}
           </div>
-          <button
+          {session?.role !== "jfc_readonly" && <button
             type="button"
             onClick={startBulk}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             <Layers className="h-4 w-4" />
             Bulk Review
-          </button>
+          </button>}
         </div>
       </div>
 

@@ -145,6 +145,7 @@ export function Sidebar() {
     items: g.items
       .flatMap((item) => {
         if (item.to !== "/launch") return [item];
+        if (role === "jfc_readonly") return [];
         const launchItem: NavItem =
           role === "admin" || role === "jfc"
             ? item

@@ -69,6 +69,8 @@ export const recordLaunchedBatch = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const c = sb();
     const payload = {
       batch_id: data.batchId,

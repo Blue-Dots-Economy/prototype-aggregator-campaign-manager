@@ -30,6 +30,8 @@ export const rayaCreateBatch = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const body = {
       agent_id: data.agentId,
       batch_name: data.batchName,
@@ -121,6 +123,8 @@ export const rayaStartBatch = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     await delay(1_500);
     const body: Record<string, any> = {};
     if (data.schedule) body.schedule = data.schedule;
@@ -247,6 +251,8 @@ export const rayaUpdateBatch = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const body: Record<string, any> = {};
     if (data.name) body.name = data.name;
     if (data.schedule) body.schedule = data.schedule;
@@ -266,6 +272,8 @@ export const rayaStopBatch = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     return (await rayaFetch(`/batch/${encodeURIComponent(data.batchId)}/stop`, {
       method: "POST",
       json: {},
@@ -317,6 +325,8 @@ export const rayaInitiateCall = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const body = {
       agent_id: data.agentId,
       to_number: data.toNumber,

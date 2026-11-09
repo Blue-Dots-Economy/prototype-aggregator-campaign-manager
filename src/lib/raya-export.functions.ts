@@ -67,6 +67,8 @@ export const setExportTarget = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const sheetId = parseSheetId(data.sheetUrlOrId);
     if (!sheetId) throw new Error("Provide a valid Google Sheet URL or ID.");
 
@@ -698,6 +700,8 @@ export const exportBatchToStaging = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     if (!process.env.RAYA_API_KEY) throw new Error("RAYA_API_KEY not set");
 
     const c = sb();

@@ -29,7 +29,7 @@ export async function blueDotsScope(input: { instance: string; aggregatorId?: st
   const districts: Record<string, string> = { Ghaziabad: "UP", GZB: "UP", UP: "UP", "Hubli-Dharwad": "KA", Dharwad: "KA", Karnataka: "KA", KA: "KA" };
   const instance = districts[actor.district ?? ""];
   if (!instance || instance !== input.instance) throw new Error("Unauthorized district");
-  if (actor.role === "jfc") return input;
+  if (actor.role === "jfc" || actor.role === "jfc_readonly") return input;
   if (actor.role === "owner" && actor.node_name) return { ...input, aggregatorId: actor.node_name };
   if (actor.role === "coordinator" && actor.node_name) return { ...input, coordinatorId: actor.node_name, aggregatorId: null };
   throw new Error("Unauthorized");

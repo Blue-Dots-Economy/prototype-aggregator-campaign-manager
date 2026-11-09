@@ -41,7 +41,7 @@ function MetricTile({ label, value, caption, Icon }: { label: string; value: str
 }
 type SortKey = "activity" | "dots" | "new7d";
 
-export function DistrictBluedots({ district }: { district: string }) {
+export function DistrictBluedots({ district, readOnly = false }: { district: string; readOnly?: boolean }) {
   const instance = INSTANCE[district] ?? "UP";
   const [view, setView] = useState<"all" | "seeker" | "provider">("all");
   const typeLabel = view === "provider" ? "Providers" : view === "seeker" ? "Seekers" : "Participants";

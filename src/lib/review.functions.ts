@@ -368,6 +368,8 @@ const FEEDBACK_COLUMNS = [
 export const submitReview = createServerFn({ method: "POST" })
   .inputValidator((data: { review: ReviewInput }) => data)
   .handler(async ({ data }) => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const review: ReviewInput = { review_type: "transcript", ...data.review, company_name: "" };
     const client = await sb();
     const { error } = await client

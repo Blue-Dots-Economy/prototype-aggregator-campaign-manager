@@ -34,6 +34,8 @@ export interface CampaignRequestInput {
 export const submitCampaignRequest = createServerFn({ method: "POST" })
   .inputValidator((data: { request: CampaignRequestInput }) => data)
   .handler(async ({ data }): Promise<{ ok: boolean; id: string | null }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const r = data.request;
     if (!r.agent_id) throw new Error("Missing agent.");
     if (r.source !== "pick" && !r.contacts?.length) throw new Error("No contacts to request.");
@@ -69,6 +71,8 @@ export const listCampaignRequests = createServerFn({ method: "GET" })
 export const updateCampaignRequest = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string; patch: Record<string, unknown> }) => data)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const client = await sb();
     const allowed = ["schedule", "concurrency", "max_retries", "retry_after_hrs", "selected_statuses", "batch_name", "campaign_day", "campaign_date"];
     const patch: Record<string, unknown> = {};
@@ -82,6 +86,8 @@ export const updateCampaignRequest = createServerFn({ method: "POST" })
 export const setCampaignRequestStatus = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string; status: string; reviewer_email?: string; batch_id?: string; decline_reason?: string }) => data)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const client = await sb();
     const patch: Record<string, unknown> = { status: data.status, updated_at: new Date().toISOString() };
     if (data.reviewer_email) patch["reviewer_email"] = data.reviewer_email;

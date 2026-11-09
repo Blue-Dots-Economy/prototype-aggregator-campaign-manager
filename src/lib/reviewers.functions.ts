@@ -19,7 +19,7 @@ const ECOSYSTEM_CREDENTIALS: Record<string, string> = {
 
 export const resolveLogin = createServerFn({ method: "POST" })
   .inputValidator((d: { email: string; password?: string }) => d)
-  .handler(async ({ data }): Promise<{ role: "admin" | "user" | "ecosystem" | "jfc" | "owner" | "coordinator" | null; name?: string | null; district?: string | null; program?: string | null; node_type?: string | null; node_name?: string | null }> => {
+  .handler(async ({ data }): Promise<{ role: "admin" | "user" | "ecosystem" | "jfc" | "jfc_readonly" | "owner" | "coordinator" | null; name?: string | null; district?: string | null; program?: string | null; node_type?: string | null; node_name?: string | null }> => {
     const email = (data.email || "").trim().toLowerCase();
     const password = data.password || "";
     const client = await sb();
@@ -31,7 +31,7 @@ export const resolveLogin = createServerFn({ method: "POST" })
         const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
         await issueBlueDotsSession(email);
         return {
-          role: row.role as "admin" | "user" | "ecosystem" | "jfc" | "owner" | "coordinator",
+          role: row.role as "admin" | "user" | "ecosystem" | "jfc" | "jfc_readonly" | "owner" | "coordinator",
           name: row.name ?? null,
           district: row.district ?? null,
           program: row.program ?? null,
@@ -40,11 +40,23 @@ export const resolveLogin = createServerFn({ method: "POST" })
         };
       }
     } catch { /* fall through to legacy checks */ }
-    if (ADMIN_CREDENTIALS[email] && ADMIN_CREDENTIALS[email] === password) return { role: "admin" };
-    if (ECOSYSTEM_CREDENTIALS[email] && ECOSYSTEM_CREDENTIALS[email] === password) return { role: "ecosystem" };
+    if (ADMIN_CREDENTIALS[email] && ADMIN_CREDENTIALS[email] === password) {
+      const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
+      await issueBlueDotsSession(email);
+      return { role: "admin" };
+    }
+    if (ECOSYSTEM_CREDENTIALS[email] && ECOSYSTEM_CREDENTIALS[email] === password) {
+      const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
+      await issueBlueDotsSession(email);
+      return { role: "ecosystem" };
+    }
     try {
       const { data: r } = await client.from("reviewers").select("email").eq("email", email).maybeSingle();
-      if (r) return { role: "user" };
+      if (r) {
+        const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
+        await issueBlueDotsSession(email);
+        return { role: "user" };
+      }
     } catch { /* ignore */ }
     return { role: null };
   });
@@ -60,6 +72,8 @@ export const listReviewers = createServerFn({ method: "GET" })
 export const addReviewer = createServerFn({ method: "POST" })
   .inputValidator((d: { email: string }) => d)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const email = (data.email || "").trim().toLowerCase();
     if (!email) return { ok: false };
     try { await (await sb()).from("reviewers").upsert({ email }, { onConflict: "email" }); return { ok: true }; }
@@ -69,6 +83,8 @@ export const addReviewer = createServerFn({ method: "POST" })
 export const removeReviewer = createServerFn({ method: "POST" })
   .inputValidator((d: { email: string }) => d)
   .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const { requireWriteAccess } = await import("./write-auth.server");
+    await requireWriteAccess();
     const email = (data.email || "").trim().toLowerCase();
     try { await (await sb()).from("reviewers").delete().eq("email", email); return { ok: true }; }
     catch { return { ok: false }; }
