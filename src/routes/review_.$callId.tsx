@@ -20,6 +20,14 @@ import { cn } from "@/lib/utils";
 import { playSwoosh } from "@/lib/sfx";
 
 export const Route = createFileRoute("/review_/$callId")({
+  head: () => ({ meta: [
+    { title: "Call Transcript | Blue Dots Dashboard" },
+    { name: "description", content: "Read an individual Blue Dots call transcript, recording and review history." },
+    { property: "og:title", content: "Call Transcript | Blue Dots Dashboard" },
+    { property: "og:description", content: "Read an individual Blue Dots call transcript, recording and review history." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   validateSearch: (s: Record<string, unknown>) => ({ bulk: typeof s.bulk === "string" ? s.bulk : undefined }),
   component: TranscriptReview,
 });

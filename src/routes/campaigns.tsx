@@ -24,7 +24,17 @@ import { exportBatchToStaging } from "@/lib/raya-export.functions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/campaigns")({ component: CampaignsPage });
+export const Route = createFileRoute("/campaigns")({
+  head: () => ({ meta: [
+    { title: "Campaign Analysis | Blue Dots Dashboard" },
+    { name: "description", content: "Blue Dots campaign-level results, schedules and live call progress." },
+    { property: "og:title", content: "Campaign Analysis | Blue Dots Dashboard" },
+    { property: "og:description", content: "Blue Dots campaign-level results, schedules and live call progress." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
+  component: CampaignsPage,
+});
 
 const RECENT_WINDOW_DAYS = 2;
 const PAGE_SIZE = 12;

@@ -12,6 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/review")({
+  head: () => ({ meta: [
+    { title: "Call Review | Blue Dots Dashboard" },
+    { name: "description", content: "Browse Blue Dots call recordings, transcripts and existing reviews." },
+    { property: "og:title", content: "Call Review | Blue Dots Dashboard" },
+    { property: "og:description", content: "Browse Blue Dots call recordings, transcripts and existing reviews." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   validateSearch: (s: Record<string, unknown>) => ({ prefill: typeof s.prefill === "string" ? s.prefill : undefined }),
   component: ReviewHub,
 });
