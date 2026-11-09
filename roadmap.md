@@ -1,5 +1,8 @@
 # Roadmap
 
+- [ ] Add read-only JFC access and server-side write protection; create the permanent EkStep account.
+- [ ] Verify EkStep pages, blocked actions and normal JFC behavior; run permission and regression tests.
+
 - [x] Mirror Blue Dots into local Cloud, add SQL rollup and authenticated sync; initial sync complete.
 - [x] Switch persona counts to fast rollup and participant drill-downs to lazy mirror reads; show freshness and refresh.
 - [x] Compare live counts and timings, test toggles/drills, and delete temporary verification accounts.

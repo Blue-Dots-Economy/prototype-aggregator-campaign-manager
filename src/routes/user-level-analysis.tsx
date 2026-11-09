@@ -141,8 +141,8 @@ function UserLevelAnalysis() {
   if (session?.role === "coordinator" && session.district) {
     return <CoordinatorBluedots coordName={session.nodeName ?? "My list"} district={session.district} />;
   }
-  if (session?.role === "jfc" && session.district) {
-    return <DistrictBluedots district={session.district} />;
+  if ((session?.role === "jfc" || session?.role === "jfc_readonly") && session.district) {
+    return <DistrictBluedots district={session.district} readOnly={session.role === "jfc_readonly"} />;
   }
   return <CsvBluedots />;
 }

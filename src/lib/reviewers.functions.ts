@@ -19,7 +19,7 @@ const ECOSYSTEM_CREDENTIALS: Record<string, string> = {
 
 export const resolveLogin = createServerFn({ method: "POST" })
   .inputValidator((d: { email: string; password?: string }) => d)
-  .handler(async ({ data }): Promise<{ role: "admin" | "user" | "ecosystem" | "jfc" | "owner" | "coordinator" | null; name?: string | null; district?: string | null; program?: string | null; node_type?: string | null; node_name?: string | null }> => {
+  .handler(async ({ data }): Promise<{ role: "admin" | "user" | "ecosystem" | "jfc" | "jfc_readonly" | "owner" | "coordinator" | null; name?: string | null; district?: string | null; program?: string | null; node_type?: string | null; node_name?: string | null }> => {
     const email = (data.email || "").trim().toLowerCase();
     const password = data.password || "";
     const client = await sb();
@@ -31,7 +31,7 @@ export const resolveLogin = createServerFn({ method: "POST" })
         const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
         await issueBlueDotsSession(email);
         return {
-          role: row.role as "admin" | "user" | "ecosystem" | "jfc" | "owner" | "coordinator",
+          role: row.role as "admin" | "user" | "ecosystem" | "jfc" | "jfc_readonly" | "owner" | "coordinator",
           name: row.name ?? null,
           district: row.district ?? null,
           program: row.program ?? null,

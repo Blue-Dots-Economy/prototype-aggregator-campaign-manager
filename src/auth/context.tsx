@@ -6,7 +6,7 @@ import { resolveLogin } from "@/lib/reviewers.functions";
 const STORAGE_KEY = "rozgar-auth";
 const COOKIE_KEY = "rozgar_auth";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
-export type Role = "admin" | "user" | "ecosystem" | "jfc" | "owner" | "coordinator";
+export type Role = "admin" | "user" | "ecosystem" | "jfc" | "jfc_readonly" | "owner" | "coordinator";
 export type Session = { email: string; role: Role; name?: string | null; district?: string | null; program?: string | null; nodeType?: string | null; nodeName?: string | null };
 
 function readCookie(name: string): string | null {
@@ -51,8 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!raw) raw = readCookie(COOKIE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed?.email && (parsed.role === "user" || parsed.role === "coordinator")) {
-            // Only reviewer sessions auto-restore (their own email, low risk).
+          if (parsed?.email && (parsed.role === "user" || parsed.role === "coordinator" || parsed.role === "jfc_readonly")) {
+            // Low-risk UI sessions may restore; server permissions still use the signed credential.
             setSession(parsed);
             // Re-sync both stores so whichever was missing gets refilled.
             try { window.localStorage.setItem(STORAGE_KEY, raw); } catch { /* ignore */ }

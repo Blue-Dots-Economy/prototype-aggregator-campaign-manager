@@ -16,6 +16,7 @@ export function TopBar() {
   const { config } = useProgram();
   const { session } = useAuth();
   const canDirectLaunch = session?.role === "admin" || session?.role === "jfc";
+  const readOnly = session?.role === "jfc_readonly";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isUserOverview = pathname === "/user-level-analysis";
   const sync = useSyncProgram(config.id);
@@ -78,11 +79,11 @@ export function TopBar() {
                 </Button>
               </Link>
             )}
-            <Link to={canDirectLaunch ? "/launch" : "/request-campaign"}>
+            {!readOnly && <Link to={canDirectLaunch ? "/launch" : "/request-campaign"}>
               <Button size="sm" className="gap-1.5 bg-brand text-brand-foreground hover:bg-brand/90">
                 <Rocket className="h-4 w-4" /> {canDirectLaunch ? "Launch campaign" : "Request campaign"}
               </Button>
-            </Link>
+            </Link>}
           </>
         )}
         <AccountMenu />

@@ -333,14 +333,14 @@ function ReviewHub() {
               </button>
             ))}
           </div>
-          <button
+          {session?.role !== "jfc_readonly" && <button
             type="button"
             onClick={startBulk}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             <Layers className="h-4 w-4" />
             Bulk Review
-          </button>
+          </button>}
         </div>
       </div>
 
