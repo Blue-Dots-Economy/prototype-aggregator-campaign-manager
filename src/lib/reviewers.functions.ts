@@ -50,42 +50,5 @@ export const resolveLogin = createServerFn({ method: "POST" })
       await issueBlueDotsSession(email);
       return { role: "ecosystem" };
     }
-    try {
-      const { data: r } = await client.from("reviewers").select("email").eq("email", email).maybeSingle();
-      if (r) {
-        const { issueBlueDotsSession } = await import("./blue-dots-auth.server");
-        await issueBlueDotsSession(email);
-        return { role: "user" };
-      }
-    } catch { /* ignore */ }
     return { role: null };
-  });
-
-export const listReviewers = createServerFn({ method: "GET" })
-  .handler(async (): Promise<string[]> => {
-    try {
-      const { data } = await (await sb()).from("reviewers").select("email").order("email");
-      return (data ?? []).map((r: { email: string }) => r.email);
-    } catch { return []; }
-  });
-
-export const addReviewer = createServerFn({ method: "POST" })
-  .inputValidator((d: { email: string }) => d)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    const { requireWriteAccess } = await import("./write-auth.server");
-    await requireWriteAccess();
-    const email = (data.email || "").trim().toLowerCase();
-    if (!email) return { ok: false };
-    try { await (await sb()).from("reviewers").upsert({ email }, { onConflict: "email" }); return { ok: true }; }
-    catch { return { ok: false }; }
-  });
-
-export const removeReviewer = createServerFn({ method: "POST" })
-  .inputValidator((d: { email: string }) => d)
-  .handler(async ({ data }): Promise<{ ok: boolean }> => {
-    const { requireWriteAccess } = await import("./write-auth.server");
-    await requireWriteAccess();
-    const email = (data.email || "").trim().toLowerCase();
-    try { await (await sb()).from("reviewers").delete().eq("email", email); return { ok: true }; }
-    catch { return { ok: false }; }
   });
