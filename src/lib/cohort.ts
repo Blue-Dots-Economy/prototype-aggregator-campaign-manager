@@ -1,4 +1,4 @@
-import type { Seeker } from "./upSeekersCsv";
+import type { Seeker } from "./my-blue-dots-live.model";
 
 export type CohortIntent = "drive" | "fill";
 export type ConfidenceBand = "low" | "medium" | "high";

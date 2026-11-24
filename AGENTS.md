@@ -20,3 +20,5 @@
 - Review-list reads must not select the heavy `data` jsonb column; only single-call detail fetches may (detoasting transcripts is what made the list time out).
 
 - Content-write endpoints validate the signed login credential against the active app-user registry and reject read-only roles; browser roles only control affordances.
+
+- The default My Blue Dots profile view reads bounded keyset slices from the pipeline, joins instance-scoped apply actions, and stitches slices client-side so full-table responses never exceed the framework cap; role hierarchy RPC views remain separate.

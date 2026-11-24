@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Users,
   UserPlus,
@@ -15,8 +15,6 @@ import {
   Moon,
   Search,
   ChevronDown,
-  Upload,
-  RotateCcw,
   Info,
   CalendarIcon,
 } from "lucide-react";
@@ -65,15 +63,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  loadSeekers,
-  loadSeekersAsync,
-  saveUploadedCsv,
-  resetToBundled,
-  PROFILE_FIELD_LABELS,
-  type Seeker,
-  type CsvMeta,
-} from "@/lib/upSeekersCsv";
+import { PROFILE_FIELD_LABELS, type Seeker } from "@/lib/my-blue-dots-live.model";
+import { fetchMyBlueDotsLive, loadLiveSeekers } from "@/lib/my-blue-dots-live.functions";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/auth/context";
 import { DistrictBluedots } from "@/components/user/DistrictBluedots";
 import { AggregatorBluedots } from "@/components/user/AggregatorBluedots";
@@ -98,14 +91,9 @@ const STATUS_STYLES: Record<Seeker["status"], string> = {
   Inactive: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
 };
 
-// Parses "M/D/YYYY" or "MM/DD/YYYY" strings from the CSV into a Date at midnight.
 function parseCreatedOn(s: string): Date | null {
-  if (!s) return null;
-  const parts = s.trim().split("/");
-  if (parts.length !== 3) return null;
-  const [m, d, y] = parts.map((p) => parseInt(p, 10));
-  if (!m || !d || !y) return null;
-  return new Date(y, m - 1, d);
+  const date = new Date(s);
+  return Number.isFinite(date.getTime()) ? date : null;
 }
 
 function MetricTile({
@@ -144,14 +132,23 @@ function UserLevelAnalysis() {
   if ((session?.role === "jfc" || session?.role === "jfc_readonly") && session.district) {
     return <DistrictBluedots district={session.district} readOnly={session.role === "jfc_readonly"} />;
   }
-  return <CsvBluedots />;
+  return <LiveBluedots />;
 }
 
-function CsvBluedots() {
-  const initial = useMemo(() => loadSeekers(), []);
-  const [seekers, setSeekers] = useState<Seeker[]>(initial.seekers);
-  const [meta, setMeta] = useState<CsvMeta>(initial.meta);
-  const [isFetching, setIsFetching] = useState(false);
+function LiveBluedots() {
+  const { session } = useAuth();
+  const instance: "UP" | "KA" = /dharwad|hubli|karnataka|^ka$/i.test(session?.district ?? "") ? "KA" : "UP";
+  const fetchLive = useServerFn(fetchMyBlueDotsLive);
+  const live = useQuery({
+    queryKey: ["my-blue-dots-live", session?.email, instance],
+    queryFn: ({ signal }) => loadLiveSeekers(fetchLive, instance, signal),
+    enabled: Boolean(session),
+    staleTime: 60000,
+    retry: false,
+  });
+  const seekers = live.data?.seekers ?? [];
+  const isFetching = live.isFetching;
+  const refetch = () => live.refetch();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [profileFilter, setProfileFilter] = useState<string[]>([]);
@@ -160,55 +157,6 @@ function CsvBluedots() {
   const [appliedRange, setAppliedRange] = useState<DateRange | undefined>(undefined);
   const [selected, setSelected] = useState<Seeker | null>(null);
   const [profileInfoOpen, setProfileInfoOpen] = useState(false);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  // Hydrate from IndexedDB after mount (SSR-safe)
-  useEffect(() => {
-    loadSeekersAsync().then(({ seekers: s, meta: m }) => {
-      setSeekers(s);
-      setMeta(m);
-    });
-  }, []);
-
-  const refetch = async () => {
-    setIsFetching(true);
-    const { seekers: s, meta: m } = await loadSeekersAsync();
-    setSeekers(s);
-    setMeta(m);
-    setTimeout(() => setIsFetching(false), 300);
-  };
-
-  const handleUploadClick = () => fileRef.current?.click();
-
-  const handleFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    try {
-      const { seekers: s, meta: m, persisted } = await saveUploadedCsv(file.name, text);
-      setSeekers(s);
-      setMeta(m);
-      if (!persisted) {
-        alert(
-          `Loaded ${s.length} rows from "${file.name}", but it couldn't be saved to browser storage. It will remain active until you reload the page.`,
-        );
-      }
-    } catch (err) {
-      alert("Failed to parse CSV: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  };
-
-  const handleReset = async () => {
-    const { seekers: s, meta: m } = await resetToBundled();
-    setSeekers(s);
-    setMeta(m);
-  };
-
-
-
-
   const dateScopedSeekers = useMemo(() => {
     const hasJoined = Boolean(dateRange?.from || dateRange?.to);
     const hasApplied = Boolean(appliedRange?.from || appliedRange?.to);
@@ -265,15 +213,13 @@ function CsvBluedots() {
     let newLast7 = 0;
     let total0 = 0;
     let totalGt0 = 0;
-    let shortlisted0 = 0;
-    let shortlistedGt0 = 0;
+    let accepted0 = 0;
+    let acceptedGt0 = 0;
     let rejected0 = 0;
     let rejectedGt0 = 0;
     let pending0 = 0;
     let pendingGt0 = 0;
     const fieldPassCounts = new Array(PROFILE_FIELD_LABELS.length).fill(0) as number[];
-    let emailCount = 0;
-    let phoneCount = 0;
     const signalCounts = { Strong: 0, Moderate: 0, Weak: 0 } as Record<"Strong" | "Moderate" | "Weak", number>;
 
     for (const s of dateScopedSeekers) {
@@ -287,17 +233,15 @@ function CsvBluedots() {
       s.profileFieldChecks.forEach((c, i) => {
         if (c.passed) fieldPassCounts[i]++;
       });
-      if (s.emailPresent) emailCount++;
-      if (s.phonePresent) phoneCount++;
 
       if (s.userId) {
         profilesPerUser.set(s.userId, (profilesPerUser.get(s.userId) ?? 0) + 1);
         if (s.applications > 0) usersWithApps.add(s.userId);
       }
       if (s.profileAge !== null && s.profileAge <= 7) newLast7++;
-      const pending = Math.max(0, s.applications - s.shortlisted - s.rejected);
+      const pending = s.pending;
       if (s.applications === 0) total0++; else totalGt0++;
-      if (s.shortlisted === 0) shortlisted0++; else shortlistedGt0++;
+      if (s.accepted === 0) accepted0++; else acceptedGt0++;
       if (s.rejected === 0) rejected0++; else rejectedGt0++;
       if (pending === 0) pending0++; else pendingGt0++;
     }
@@ -319,6 +263,7 @@ function CsvBluedots() {
       pctUsersMultiProfile: uniqueUsers ? Math.round((usersMulti / uniqueUsers) * 100) : 0,
       usersWithAppsCount: usersWithApps.size,
       pctUsersWithApps: uniqueUsers ? Math.round((usersWithApps.size / uniqueUsers) * 100) : 0,
+      totalApps,
       avgAppsPerSeeker: total ? (totalApps / total).toFixed(2) : "0",
       avgCompletion: total ? Math.round((complete / total) * 100) : 0,
       fieldCompletion: PROFILE_FIELD_LABELS.map((label, i) => ({
@@ -326,18 +271,12 @@ function CsvBluedots() {
         count: fieldPassCounts[i],
         pct: total ? Math.round((fieldPassCounts[i] / total) * 100) : 0,
       })),
-      emailPct: total ? Math.round((emailCount / total) * 100) : 0,
-      emailCount,
-      phonePct: total ? Math.round((phoneCount / total) * 100) : 0,
-      phoneCount,
-
-
       newLast7,
       appliedCounts: {
         total0,
         totalGt0,
-        shortlisted0,
-        shortlistedGt0,
+        accepted0,
+        acceptedGt0,
         rejected0,
         rejectedGt0,
         pending0,
@@ -369,12 +308,12 @@ function CsvBluedots() {
         if (!sigMatch && !fieldMatch) return false;
       }
       if (appliedFilters.length > 0) {
-        const pending = Math.max(0, s.applications - s.shortlisted - s.rejected);
+        const pending = s.pending;
         const matches =
           (appliedFilters.includes("total-0") && s.applications === 0) ||
           (appliedFilters.includes("total-gt0") && s.applications > 0) ||
-          (appliedFilters.includes("shortlisted-0") && s.shortlisted === 0) ||
-          (appliedFilters.includes("shortlisted-gt0") && s.shortlisted > 0) ||
+          (appliedFilters.includes("accepted-0") && s.accepted === 0) ||
+          (appliedFilters.includes("accepted-gt0") && s.accepted > 0) ||
           (appliedFilters.includes("rejected-0") && s.rejected === 0) ||
           (appliedFilters.includes("rejected-gt0") && s.rejected > 0) ||
           (appliedFilters.includes("pending-0") && pending === 0) ||
@@ -430,8 +369,21 @@ function CsvBluedots() {
     },
   ];
 
+  if (live.isPending || (live.isError && !live.data)) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold tracking-tight">My Bluedots</h1>
+        <div role={live.isError ? "alert" : "status"} className="py-12 text-center text-muted-foreground">
+          {live.isError ? "Live participant data could not be loaded." : "Loading live participants…"}
+          {live.isError && <Button variant="outline" className="ml-3" onClick={() => refetch()}>Retry</Button>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {live.isError && <div role="alert" className="text-sm text-destructive">Refresh failed. Previously loaded live data is still shown. <Button variant="outline" onClick={() => refetch()}>Retry</Button></div>}
       {/* Header */}
       <div className="space-y-4">
         <div>
@@ -441,13 +393,6 @@ function CsvBluedots() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={handleFileChosen}
-          />
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -544,36 +489,6 @@ function CsvBluedots() {
               />
             </PopoverContent>
           </Popover>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <RefreshCw className="h-4 w-4" />
-                Sync data
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                Source: <span className="font-medium text-foreground">{meta.name}</span>
-                <div>{meta.rows.toLocaleString()} rows</div>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => refetch()}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                UP Job Seekers (reload)
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => handleUploadClick()}>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload new CSV…
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => handleReset()}>
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reset to bundled CSV
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>KA Job Seekers</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button className="gap-2">
             <UserPlus className="h-4 w-4" />
             Add Participants
@@ -660,7 +575,7 @@ function CsvBluedots() {
             />
             <MetricTile
               label="Applications"
-              value={stats.withApps.toLocaleString()}
+              value={stats.totalApps.toLocaleString()}
               description={`${stats.pctProfilesWithApps}% of all profiles`}
               Icon={Send}
             />
@@ -741,7 +656,7 @@ function CsvBluedots() {
                 <div className="flex flex-col flex-1">
                   <span>Strong Signal</span>
                   <span className="text-[11px] text-muted-foreground">
-                    Name, Location, Email/Phone, Age, Role, Salary
+                    Role, Age, Education, Experience, Location
                   </span>
                 </div>
                 <span className="ml-auto text-muted-foreground whitespace-nowrap">
@@ -761,7 +676,7 @@ function CsvBluedots() {
                 <div className="flex flex-col flex-1">
                   <span>Moderate Signal</span>
                   <span className="text-[11px] text-muted-foreground">
-                    Location, Role, Salary present — others may be missing
+                    Role, Age, Location present — others may be missing
                   </span>
                 </div>
                 <span className="ml-auto text-muted-foreground whitespace-nowrap">
@@ -781,7 +696,7 @@ function CsvBluedots() {
                 <div className="flex flex-col flex-1">
                   <span>Weak Signal</span>
                   <span className="text-[11px] text-muted-foreground">
-                    Missing Location, Role or Salary
+                    Missing Role, Age or Location
                   </span>
                 </div>
                 <span className="ml-auto text-muted-foreground whitespace-nowrap">
@@ -865,29 +780,29 @@ function CsvBluedots() {
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Shortlisted
+                Accepted
               </DropdownMenuLabel>
               <DropdownMenuCheckboxItem
-                checked={appliedFilters.includes("shortlisted-0")}
+                checked={appliedFilters.includes("accepted-0")}
                 onCheckedChange={(checked) =>
                   setAppliedFilters((prev) =>
-                    checked ? [...prev, "shortlisted-0"] : prev.filter((v) => v !== "shortlisted-0"),
+                    checked ? [...prev, "accepted-0"] : prev.filter((v) => v !== "accepted-0"),
                   )
                 }
                 onSelect={(e) => e.preventDefault()}
               >
-                0 <span className="ml-auto text-muted-foreground">({stats.appliedCounts.shortlisted0.toLocaleString()})</span>
+                0 <span className="ml-auto text-muted-foreground">({stats.appliedCounts.accepted0.toLocaleString()})</span>
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
-                checked={appliedFilters.includes("shortlisted-gt0")}
+                checked={appliedFilters.includes("accepted-gt0")}
                 onCheckedChange={(checked) =>
                   setAppliedFilters((prev) =>
-                    checked ? [...prev, "shortlisted-gt0"] : prev.filter((v) => v !== "shortlisted-gt0"),
+                    checked ? [...prev, "accepted-gt0"] : prev.filter((v) => v !== "accepted-gt0"),
                   )
                 }
                 onSelect={(e) => e.preventDefault()}
               >
-                &gt;0 <span className="ml-auto text-muted-foreground">({stats.appliedCounts.shortlistedGt0.toLocaleString()})</span>
+                &gt;0 <span className="ml-auto text-muted-foreground">({stats.appliedCounts.acceptedGt0.toLocaleString()})</span>
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -980,17 +895,12 @@ function CsvBluedots() {
                   </span>
                 </TableHead>
                 <TableHead colSpan={4} className="text-center border-l">Applied</TableHead>
-                <TableHead colSpan={4} className="text-center border-l">Pre-shortlisted</TableHead>
                 <TableHead rowSpan={2} className="align-middle border-l">
                   User Status
                 </TableHead>
                 <TableHead rowSpan={2} className="align-middle">Recommended Action</TableHead>
               </TableRow>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead className="text-xs uppercase tracking-wider border-l">Total</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Shortlisted</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Rejected</TableHead>
-                <TableHead className="text-xs uppercase tracking-wider">Pending</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider border-l">Total</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider">Accepted</TableHead>
                 <TableHead className="text-xs uppercase tracking-wider">Rejected</TableHead>
@@ -999,7 +909,7 @@ function CsvBluedots() {
             </TableHeader>
             <TableBody>
               {filtered.slice(0, 200).map((p) => {
-                const pending = Math.max(0, p.applications - p.shortlisted - p.rejected);
+                const pending = p.pending;
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-semibold">
@@ -1014,7 +924,7 @@ function CsvBluedots() {
                         User: {p.userId || "—"}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{p.createdOn || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{parseCreatedOn(p.createdOn) ? format(new Date(p.createdOn), "MMM d, yyyy") : "—"}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -1038,13 +948,9 @@ function CsvBluedots() {
                     </TableCell>
 
                     <TableCell className="border-l">{p.applications}</TableCell>
-                    <TableCell>{p.shortlisted}</TableCell>
+                    <TableCell>{p.accepted}</TableCell>
                     <TableCell>{p.rejected}</TableCell>
                     <TableCell>{pending}</TableCell>
-                    <TableCell className="border-l">0</TableCell>
-                    <TableCell>0</TableCell>
-                    <TableCell>0</TableCell>
-                    <TableCell>0</TableCell>
                     <TableCell className="border-l">
                       <TooltipProvider>
                         <Tooltip>
@@ -1079,7 +985,7 @@ function CsvBluedots() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={13} className="text-center text-sm text-muted-foreground py-10">
+                  <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-10">
                     No seekers match your filters.
                   </TableCell>
                 </TableRow>
@@ -1152,12 +1058,11 @@ function CsvBluedots() {
           <div className="space-y-3">
             <ol className="list-decimal pl-5 space-y-1.5 text-sm">
               {[
-                { label: "Name", desc: "not blank and not a placeholder (Unknown, अज्ञात, etc.)" },
-                { label: "Location", desc: "not blank and not just city / state / their combination" },
-                { label: "Email or Phone", desc: "at least one filled" },
-                { label: "Age", desc: "not blank" },
                 { label: "Role", desc: 'not blank and not "any"' },
-                { label: "Expected Salary", desc: "not blank" },
+                { label: "Age", desc: "masked age is not blank" },
+                { label: "Education", desc: "not blank" },
+                { label: "Experience", desc: "not blank" },
+                { label: "Location", desc: "a real location was set (not default)" },
               ].map((f) => {
                 const fc = stats.fieldCompletion.find((x) => x.label === f.label);
                 return (
@@ -1170,22 +1075,6 @@ function CsvBluedots() {
                         {fc ? `${fc.count.toLocaleString()} (${fc.pct}%)` : ""}
                       </span>
                     </div>
-                    {f.label === "Email or Phone" && (
-                      <div className="mt-1 ml-1 space-y-0.5 text-xs text-muted-foreground">
-                        <div className="flex justify-between gap-3">
-                          <span>Email filled</span>
-                          <span className="tabular-nums">
-                            {stats.emailCount.toLocaleString()} ({stats.emailPct}%)
-                          </span>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                          <span>Phone filled</span>
-                          <span className="tabular-nums">
-                            {stats.phoneCount.toLocaleString()} ({stats.phonePct}%)
-                          </span>
-                        </div>
-                      </div>
-                    )}
                   </li>
                 );
               })}

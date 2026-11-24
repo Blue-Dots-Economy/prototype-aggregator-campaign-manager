@@ -1,5 +1,8 @@
 # Roadmap
 
+- [x] Replace default My Blue Dots CSV with scoped, paginated live pipeline profiles and the real apply funnel.
+- [x] Remove participant CSV assets/controls; test privacy-safe completeness and verify live counts, filters, refresh, and errors.
+
 - [x] Add read-only JFC access and server-side write protection; create the permanent EkStep account.
 - [x] Verify EkStep pages, blocked actions and normal JFC behavior; run permission and regression tests.
 

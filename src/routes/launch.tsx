@@ -53,7 +53,7 @@ import { toast } from "sonner";
 import { ScheduleEditor, type ScheduleState, makeDefaultSchedule } from "@/components/ScheduleEditor";
 import { appendLaunchLog } from "@/lib/launch-log";
 import { cn } from "@/lib/utils";
-import { loadSeekersAsync, type Seeker } from "@/lib/upSeekersCsv";
+import { loadSeekersAsync, type Seeker } from "@/lib/my-blue-dots-live.functions";
 import { buildCohort, type CohortIntent, type ConfidenceBand } from "@/lib/cohort";
 import { previewMasterCohort, createMasterBatch, type MasterFilters } from "@/lib/master-cohort.functions";
 

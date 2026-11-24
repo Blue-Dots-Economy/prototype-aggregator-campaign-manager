@@ -10,7 +10,7 @@ import { useAuth } from "@/auth/context";
 import { submitCampaignRequest } from "@/lib/campaign-requests.functions";
 import { listProgramAgents } from "@/lib/agents.functions";
 import { buildCohort, type CohortIntent, type ConfidenceBand } from "@/lib/cohort";
-import { loadSeekersAsync, type Seeker } from "@/lib/upSeekersCsv";
+import { loadSeekersAsync, type Seeker } from "@/lib/my-blue-dots-live.functions";
 import { ScheduleEditor, type ScheduleState, makeDefaultSchedule } from "@/components/ScheduleEditor";
 import { PickAudience, type PickResolved } from "@/components/PickAudience";
 import { Panel } from "@/components/Panel";
