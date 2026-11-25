@@ -33,17 +33,17 @@ function Seg<T extends string>({ value, options, onChange, disabled }: { value: 
   ))}</div>;
 }
 const td = "px-3 py-2.5 text-right tabular-nums";
+const cell = (v: number, c: string) => cn(td, v ? c : "text-muted-foreground");
 function AggCells({ s }: { s: RollupStats }) {
+  const rate = s.dots ? `${(s.applied / s.dots * 100).toFixed(1)}%` : null;
   return <>
     <td className={td}>{fmt(s.dots)}</td>
-    <td className="px-3 py-2.5">
-      <TooltipProvider><Tooltip><TooltipTrigger asChild>
-        <span tabIndex={0} aria-label={LIFE.map(l => `${l.status} ${fmt(s[l.key])}`).join(" · ")} className="flex h-[9px] w-[110px] overflow-hidden rounded-full bg-muted">
-          {s.dots > 0 && LIFE.filter(l => s[l.key] > 0).map(l => <span key={l.status} className={cn("h-full shrink-0", l.dot)} style={{ width: `${s[l.key] / s.dots * 100}%` }} />)}
-        </span>
-      </TooltipTrigger><TooltipContent>{LIFE.map(l => `${l.status} ${fmt(s[l.key])}`).join(" · ")}</TooltipContent></Tooltip></TooltipProvider>
-    </td>
-    <td className={td} title="Seekers with ≥1 application">{fmt(s.applied)}</td>
+    <td className={cell(s.new7d, LIFE[0].c)}>{fmt(s.new7d)}</td>
+    <td className={cell(s.active, LIFE[1].c)}>{fmt(s.active)}</td>
+    <td className={cell(s.atRisk, LIFE[2].c)}>{fmt(s.atRisk)}</td>
+    <td className={cell(s.inactive, LIFE[3].c)}>{fmt(s.inactive)}</td>
+    <td className={cn(td, s.applied ? "" : "text-muted-foreground")} title="Seekers with ≥1 application">{fmt(s.applied)}</td>
+    <td className="px-3 py-2.5 text-right"><span className={cn("inline-block rounded-full bg-muted/40 px-2 py-0.5 text-xs tabular-nums", rate ? "text-foreground" : "text-muted-foreground")}>{rate ?? "—"}</span></td>
   </>;
 }
 function SeekerRow({ r }: { r: ScopedSeekerRow }) {
@@ -78,11 +78,11 @@ function passes(r: ScopedSeekerRow, f: Filters, now: number) {
 function SeekerRows({ instance, coordId, filters }: { instance: string; coordId: string; filters: Filters }) {
   const fn = useServerFn(fetchScopedSeekers);
   const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
-  if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={4} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
-  if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={4} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
+  if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={8} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
+  if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={8} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const now = Date.now();
   const rows = q.data.rows.filter(r => passes(r, filters, now));
-  return <tr className="border-t"><td colSpan={4} className="p-0"><SeekerTable rows={rows}>
+  return <tr className="border-t"><td colSpan={8} className="p-0"><SeekerTable rows={rows}>
     {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
     {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
   </SeekerTable></td></tr>;
@@ -157,7 +157,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
     <div className="overflow-auto rounded-xl border bg-card">
       {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
-          <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className="px-3 py-2 text-left font-medium">Lifecycle</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th></tr>
+          <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")}>New</th><th scope="col" className={cn(th, "tabular-nums")}>Active</th><th scope="col" className={cn(th, "tabular-nums")}>At Risk</th><th scope="col" className={cn(th, "tabular-nums")}>Inactive</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>
         </thead>
         <tbody>
           {level === "org" && orgs.map(o => <Fragment key={o.id}>
