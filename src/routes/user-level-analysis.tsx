@@ -68,7 +68,7 @@ import { fetchMyBlueDotsLive } from "@/lib/my-blue-dots-live.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/auth/context";
-import { DistrictBluedots } from "@/components/user/DistrictBluedots";
+import { UnifiedBluedots } from "@/components/user/UnifiedBluedots";
 import { AggregatorBluedots } from "@/components/user/AggregatorBluedots";
 import { CoordinatorBluedots } from "@/components/user/CoordinatorBluedots";
 
@@ -130,7 +130,7 @@ function UserLevelAnalysis() {
     return <CoordinatorBluedots coordName={session.nodeName ?? "My list"} district={session.district} />;
   }
   if ((session?.role === "jfc" || session?.role === "jfc_readonly") && session.district) {
-    return <DistrictBluedots district={session.district} readOnly={session.role === "jfc_readonly"} />;
+    return <UnifiedBluedots district={session.district} readOnly={session.role === "jfc_readonly"} />;
   }
   return <LiveBluedots />;
 }
