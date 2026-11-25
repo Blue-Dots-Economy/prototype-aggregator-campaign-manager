@@ -9,7 +9,6 @@ import {
   Briefcase,
   Headphones,
   Users,
-  Inbox,
   ChevronDown,
   ChevronRight,
   Radar,
@@ -145,12 +144,8 @@ export function Sidebar() {
     items: g.items
       .flatMap((item) => {
         if (item.to !== "/launch") return [item];
-        if (role === "jfc_readonly") return [];
-        const launchItem: NavItem =
-          role === "admin" || role === "jfc"
-            ? item
-            : { to: "/request-campaign", label: "Request a campaign", icon: Rocket };
-        return [launchItem, { to: "/campaign-requests", label: "Campaign Requests", icon: Inbox } as NavItem];
+        if (role === "admin" || role === "jfc") return [item];
+        return [];
       })
       .map((item) => ({
         ...item,

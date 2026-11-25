@@ -5,9 +5,16 @@ describe("read-only JFC", () => {
   for (const path of ["/user-level-analysis", "/", "/campaigns", "/review", "/ecosystem-view", "/review/call-123"]) {
     it(`can read ${path}`, () => expect(canAccess("jfc_readonly", path)).toBe(true));
   }
-  for (const path of ["/launch", "/campaign-requests", "/request-campaign", "/cm-test"]) {
+  for (const path of ["/launch", "/cm-test"]) {
     it(`cannot open ${path}`, () => expect(canAccess("jfc_readonly", path)).toBe(false));
     it(`preserves JFC access to ${path}`, () => expect(canAccess("jfc", path)).toBe(true));
+  }
+  for (const path of ["/campaign-requests", "/request-campaign"]) {
+    it(`no role can open ${path}`, () => {
+      for (const role of ["jfc", "jfc_readonly", "coordinator", "owner", "ecosystem", "user"] as const) {
+        expect(canAccess(role, path)).toBe(false);
+      }
+    });
   }
   it("lands on My Blue Dots", () => expect(landingFor("jfc_readonly")).toBe("/user-level-analysis"));
   it("cannot write", () => expect(() => assertWritableRole("jfc_readonly")).toThrow("read-only"));
