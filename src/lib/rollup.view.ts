@@ -8,7 +8,11 @@ export function nodeFor(o: RollupOrg | RollupCoordinator, view: ParticipantView)
   return { ...s, id: o.id, name: o.name, activity, quiet: s.dots > 0 && s.new7d === 0, members: o.members.filter(m => view === "all" || m.kind === view) };
 }
 export function totalsFor(nodes: RollupStats[]): RollupStats {
-  return nodes.reduce((sum, node) => ({ dots: sum.dots + node.dots, new7d: sum.new7d + node.new7d, active: sum.active + node.active, atRisk: sum.atRisk + node.atRisk, inactive: sum.inactive + node.inactive, applied: sum.applied + node.applied }), emptyStats());
+  return nodes.reduce((sum, node) => {
+    const t = emptyStats();
+    for (const k of Object.keys(t) as (keyof RollupStats)[]) t[k] = sum[k] + node[k];
+    return t;
+  }, emptyStats());
 }
 /** Coverage counts only units with participants in the selected view; tables retain zero-dot arms. */
 export function coverageFor(nodes: RollupStats[]) {

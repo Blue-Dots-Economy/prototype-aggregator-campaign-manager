@@ -19,9 +19,14 @@ const LIFE: { status: Status; key: keyof RollupStats; desc: string; Icon: typeof
 ];
 const SIGNAL: Record<ScopedSeekerRow["profileSignal"], string> = {
   Strong: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  Moderate: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  Weak: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  Moderate: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  Weak: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
 };
+const SIG: { key: "strong" | "moderate" | "weak"; label: string; dot: string }[] = [
+  { key: "strong", label: "Strong", dot: "bg-emerald-500" },
+  { key: "moderate", label: "Moderate", dot: "bg-blue-500" },
+  { key: "weak", label: "Weak", dot: "bg-amber-500" },
+];
 const fmt = (n: number) => n.toLocaleString("en-IN");
 type Level = "org" | "coord" | "flat";
 type Agg = { id: string; name: string; s: RollupStats };
@@ -33,15 +38,23 @@ function Seg<T extends string>({ value, options, onChange, disabled }: { value: 
   ))}</div>;
 }
 const td = "px-3 py-2.5 text-right tabular-nums";
-const cell = (v: number, c: string) => cn(td, v ? c : "text-muted-foreground");
 function AggCells({ s }: { s: RollupStats }) {
   const rate = s.dots ? `${(s.applied / s.dots * 100).toFixed(1)}%` : null;
+  const t = s.strong + s.moderate + s.weak;
+  const pct = t > 0 ? Math.round(s.strong / t * 100) : null;
+  const split = SIG.map(x => `${x.label} ${fmt(s[x.key])}`).join(" · ");
   return <>
     <td className={td}>{fmt(s.dots)}</td>
-    <td className={cell(s.new7d, LIFE[0].c)}>{fmt(s.new7d)}</td>
-    <td className={cell(s.active, LIFE[1].c)}>{fmt(s.active)}</td>
-    <td className={cell(s.atRisk, LIFE[2].c)}>{fmt(s.atRisk)}</td>
-    <td className={cell(s.inactive, LIFE[3].c)}>{fmt(s.inactive)}</td>
+    <td className="px-3 py-2.5">
+      <div className="flex items-center justify-end gap-2">
+        <span className={cn("text-xs tabular-nums whitespace-nowrap", pct === null ? "text-muted-foreground" : "text-foreground")}>{pct === null ? "—" : `${pct}% strong`}</span>
+        <TooltipProvider><Tooltip><TooltipTrigger asChild>
+          <span tabIndex={0} aria-label={split} className="flex h-[9px] w-[120px] overflow-hidden rounded-full bg-muted">
+            {t > 0 && SIG.filter(x => s[x.key] > 0).map(x => <span key={x.key} className={cn("h-full shrink-0", x.dot)} style={{ width: `${s[x.key] / t * 100}%` }} />)}
+          </span>
+        </TooltipTrigger><TooltipContent>{split}</TooltipContent></Tooltip></TooltipProvider>
+      </div>
+    </td>
     <td className={cn(td, s.applied ? "" : "text-muted-foreground")} title="Seekers with ≥1 application">{fmt(s.applied)}</td>
     <td className="px-3 py-2.5 text-right"><span className={cn("inline-block rounded-full bg-muted/40 px-2 py-0.5 text-xs tabular-nums", rate ? "text-foreground" : "text-muted-foreground")}>{rate ?? "—"}</span></td>
   </>;
@@ -78,11 +91,11 @@ function passes(r: ScopedSeekerRow, f: Filters, now: number) {
 function SeekerRows({ instance, coordId, filters }: { instance: string; coordId: string; filters: Filters }) {
   const fn = useServerFn(fetchScopedSeekers);
   const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
-  if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={8} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
-  if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={8} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
+  if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
+  if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const now = Date.now();
   const rows = q.data.rows.filter(r => passes(r, filters, now));
-  return <tr className="border-t"><td colSpan={8} className="p-0"><SeekerTable rows={rows}>
+  return <tr className="border-t"><td colSpan={5} className="p-0"><SeekerTable rows={rows}>
     {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
     {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
   </SeekerTable></td></tr>;
@@ -119,7 +132,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const orgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })) })), [live.orgs]);
   const coords = useMemo(() => orgs.flatMap(o => o.coords), [orgs]);
-  const totals = useMemo(() => orgs.reduce((t, o) => ({ new7d: t.new7d + o.s.new7d, active: t.active + o.s.active, atRisk: t.atRisk + o.s.atRisk, inactive: t.inactive + o.s.inactive, dots: t.dots + o.s.dots, applied: t.applied + o.s.applied }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0 } as RollupStats), [orgs]);
+  const totals = useMemo(() => orgs.reduce((t, o) => ({ new7d: t.new7d + o.s.new7d, active: t.active + o.s.active, atRisk: t.atRisk + o.s.atRisk, inactive: t.inactive + o.s.inactive, dots: t.dots + o.s.dots, applied: t.applied + o.s.applied, strong: t.strong + o.s.strong, moderate: t.moderate + o.s.moderate, weak: t.weak + o.s.weak }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0 } as RollupStats), [orgs]);
 
   if (live.loading && !orgs.length) return <LiveState loading retry={live.retry} />;
   if (live.isError || !live.available) return <LiveState loading={false} retry={live.retry} />;
@@ -157,7 +170,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
     <div className="overflow-auto rounded-xl border bg-card">
       {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
-          <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")}>New</th><th scope="col" className={cn(th, "tabular-nums")}>Active</th><th scope="col" className={cn(th, "tabular-nums")}>At Risk</th><th scope="col" className={cn(th, "tabular-nums")}>Inactive</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>
+          <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")}>Profile status</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>
         </thead>
         <tbody>
           {level === "org" && orgs.map(o => <Fragment key={o.id}>

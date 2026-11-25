@@ -57,7 +57,7 @@ describe("real Blue Dots hierarchy", () => {
     const users = [user("new", "a", "seeker", 7), user("active", "a"), user("risk", "a"), user("inactive", "a")];
     const actions = [30, 90, 91].map((age, i) => ({ action_id: String(i), source_item_owner: users[i + 1].id, created_at: daysAgo(age) }));
     const o = buildRollup([arm("a")], users, actions, [], now)[0];
-    expect(o.seekers).toEqual({ dots: 4, new7d: 1, active: 1, atRisk: 1, inactive: 1, applied: 3 });
+    expect(o.seekers).toEqual({ dots: 4, new7d: 1, active: 1, atRisk: 1, inactive: 1, applied: 3, strong: 0, moderate: 0, weak: 0 });
     expect(o.coordinators[0].seekers).toEqual(o.seekers);
   });
   it("counts live provider postings at both levels", () => {
