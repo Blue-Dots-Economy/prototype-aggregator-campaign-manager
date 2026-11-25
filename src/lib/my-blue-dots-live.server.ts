@@ -20,43 +20,53 @@ async function authorizeInstance(instance: string) {
   if (!scoped || scoped !== instance) throw new Error("Unauthorized instance");
 }
 
-export async function loadLiveProfileSlice(input: { instance: string; after: string | null; asOf: string | null }) {
+// One server call: page profiles and apply actions server-side (server->DB), aggregate, return once.
+export async function loadLiveInstance(input: { instance: string }) {
   await authorizeInstance(input.instance);
   const url = process.env['NEW_SUPABASE_URL'];
   const key = process.env['NEW_SUPABASE_SERVICE_ROLE_KEY'];
   if (!url || !key) throw new Error("Blue Dots source is unavailable.");
   const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const asOf = input.asOf ?? new Date().toISOString();
-  let query = sb.from("bluedot_seeker_profiles")
-    .select("item_id,created_by,created_at,role_wanted_raw,age_masked,education_category,work_experience,is_default_geo,instance")
-    .eq("instance", input.instance).order("item_id", { ascending: true }).limit(500);
-  if (input.after !== null) query = query.gt("item_id", input.after);
-  const { data, error } = await query;
-  if (error) throw new Error("Unable to load live Blue Dots profiles.");
-  const profiles = (data ?? []) as LiveProfile[];
-  const actions: ApplyAction[] = [];
-  // Read the source-ID interval covered by this profile slice, avoiding long IN URLs
-  // and repeated scans. Unmatched actions in that interval do not map to any profile.
-  const first = profiles[0];
-  const final = profiles.at(-1);
-  if (first && final) {
+  const asOf = new Date().toISOString();
+  const loadProfiles = async () => {
+    const out: LiveProfile[] = [];
+    let after: string | null = null;
+    for (;;) {
+      let q = sb.from("bluedot_seeker_profiles")
+        .select("item_id,created_by,created_at,role_wanted_raw,age_masked,education_category,work_experience,is_default_geo,instance")
+        .eq("instance", input.instance).order("item_id", { ascending: true }).limit(1000);
+      if (after !== null) q = q.gt("item_id", after);
+      const { data, error } = await q;
+      if (error) throw new Error("Unable to load live Blue Dots profiles.");
+      const rows = (data ?? []) as LiveProfile[];
+      const last = rows.at(-1);
+      if (!last) break;
+      out.push(...rows);
+      after = last.item_id;
+    }
+    return out;
+  };
+  const loadActions = async () => {
+    const out: ApplyAction[] = [];
     let after: string | null = null;
     for (;;) {
       let q = sb.from("bluedot_item_actions").select("action_id,source_item_id,action_status,created_at,instance")
         .eq("instance", input.instance).eq("action_type", "apply")
-        .gte("source_item_id", first.item_id).lte("source_item_id", final.item_id)
         .order("action_id", { ascending: true }).limit(1000);
       if (after !== null) q = q.gt("action_id", after);
-      const result = await q;
-      if (result.error) throw new Error("Unable to load live Blue Dots applications.");
-      const rows = (result.data ?? []) as ApplyAction[];
+      const { data, error } = await q;
+      if (error) throw new Error("Unable to load live Blue Dots applications.");
+      const rows = (data ?? []) as ApplyAction[];
       const last = rows.at(-1);
       if (!last) break;
-      actions.push(...rows);
+      out.push(...rows);
       after = last.action_id;
     }
-  }
+    return out;
+  };
+  const [profiles, actions] = await Promise.all([loadProfiles(), loadActions()]);
   const counts = aggregateActions(actions);
-  const seekers = profiles.map(p => mapLiveProfile(p, counts, Date.parse(asOf)));
-  return { seekers, summary: summarizeSeekers(seekers), asOf, nextCursor: profiles.at(-1)?.item_id ?? null };
+  const now = Date.parse(asOf);
+  const seekers = profiles.map(p => mapLiveProfile(p, counts, now));
+  return { seekers, summary: summarizeSeekers(seekers), asOf };
 }

@@ -64,7 +64,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PROFILE_FIELD_LABELS, type Seeker } from "@/lib/my-blue-dots-live.model";
-import { fetchMyBlueDotsLive, loadLiveSeekers } from "@/lib/my-blue-dots-live.functions";
+import { fetchMyBlueDotsLive } from "@/lib/my-blue-dots-live.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/auth/context";
@@ -141,7 +141,7 @@ function LiveBluedots() {
   const fetchLive = useServerFn(fetchMyBlueDotsLive);
   const live = useQuery({
     queryKey: ["my-blue-dots-live", session?.email, instance],
-    queryFn: ({ signal }) => loadLiveSeekers(fetchLive, instance, signal),
+    queryFn: () => fetchLive({ data: { instance } }),
     enabled: Boolean(session),
     staleTime: 60000,
     retry: false,
