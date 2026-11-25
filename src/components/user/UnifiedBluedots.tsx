@@ -30,7 +30,7 @@ const SIG: { key: "strong" | "moderate" | "weak"; label: string; dot: string }[]
 const fmt = (n: number) => n.toLocaleString("en-IN");
 type Level = "org" | "coord" | "flat";
 type Agg = { id: string; name: string; s: RollupStats };
-type Filters = { time: "all" | "7" | "30" | "90"; signal: "all" | ScopedSeekerRow["profileSignal"]; status: "all" | Status };
+type Filters = { time: "all" | "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"; signal: "all" | ScopedSeekerRow["profileSignal"]; status: "all" | Status };
 
 function Seg<T extends string>({ value, options, onChange, disabled }: { value: T; options: [T, string][]; onChange: (v: T) => void; disabled?: boolean }) {
   return <div className={cn("inline-flex rounded-lg border bg-muted/40 p-0.5", disabled && "opacity-50")}>{options.map(([v, l]) => (
@@ -82,10 +82,32 @@ function SeekerTable({ rows, children }: { rows: ScopedSeekerRow[]; children?: R
     </div>
   </div>;
 }
+/** Inclusive-from / exclusive-to window in local time; weeks start Monday, months are calendar months. */
+function timeWindow(key: Filters["time"], now: number): [number, number] | null {
+  if (key === "all") return null;
+  const d = new Date(now);
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const DAY = 86400000;
+  // Monday = 0 … Sunday = 6
+  const dow = (d.getDay() + 6) % 7;
+  const startOfWeek = startOfDay - dow * DAY;
+  const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const startOfLastMonth = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
+  switch (key) {
+    case "today":      return [startOfDay, Infinity];
+    case "yesterday":  return [startOfDay - DAY, startOfDay];
+    case "this_week":  return [startOfWeek, Infinity];
+    case "last_week":  return [startOfWeek - 7 * DAY, startOfWeek];
+    case "this_month": return [startOfMonth, Infinity];
+    case "last_month": return [startOfLastMonth, startOfMonth];
+  }
+  return null;
+}
 function passes(r: ScopedSeekerRow, f: Filters, now: number) {
   if (f.signal !== "all" && r.profileSignal !== f.signal) return false;
   if (f.status !== "all" && r.status !== f.status) return false;
-  if (f.time !== "all") { const t = Date.parse(r.joined); if (!Number.isFinite(t) || now - t > Number(f.time) * 86400000) return false; }
+  const win = timeWindow(f.time, now);
+  if (win) { const t = Date.parse(r.joined); if (!Number.isFinite(t) || t < win[0] || t >= win[1]) return false; }
   return true;
 }
 function SeekerRows({ instance, coordId, filters }: { instance: string; coordId: string; filters: Filters }) {
@@ -161,7 +183,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       <TooltipProvider><Tooltip><TooltipTrigger asChild><span><Seg value="all" options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"]]} onChange={() => {}} disabled /></span></TooltipTrigger><TooltipContent>Coming soon — Sanketika</TooltipContent></Tooltip></TooltipProvider>
     </div>
     <div className="flex flex-wrap items-center gap-3">
-      {chip("time", [["all", "All time"], ["7", "7d"], ["30", "30d"], ["90", "90d"]])}
+      {chip("time", [["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["this_week", "This Week"], ["last_week", "Last Week"], ["this_month", "This Month"], ["last_month", "Last Month"]])}
       {chip("signal", [["all", "All profiles"], ["Strong", "Strong"], ["Moderate", "Moderate"], ["Weak", "Weak"]])}
       {chip("status", [["all", "All status"], ["New", "New"], ["Active", "Active"], ["At Risk", "At Risk"], ["Inactive", "Inactive"]])}
       <span className="text-xs text-muted-foreground">Filters apply to seeker rows.</span>
