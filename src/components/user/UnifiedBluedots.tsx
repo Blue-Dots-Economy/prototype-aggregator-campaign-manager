@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle } from "lucide-react";
@@ -36,22 +36,38 @@ const td = "px-3 py-2.5 text-right tabular-nums";
 function AggCells({ s }: { s: RollupStats }) {
   return <>
     <td className={td}>{fmt(s.dots)}</td>
-    {LIFE.map(l => <td key={l.status} className={cn(td, l.c)}>{fmt(s[l.key])}</td>)}
+    <td className="px-3 py-2.5">
+      <TooltipProvider><Tooltip><TooltipTrigger asChild>
+        <span tabIndex={0} aria-label={LIFE.map(l => `${l.status} ${fmt(s[l.key])}`).join(" · ")} className="flex h-[9px] w-[110px] overflow-hidden rounded-full bg-muted">
+          {s.dots > 0 && LIFE.filter(l => s[l.key] > 0).map(l => <span key={l.status} className={cn("h-full shrink-0", l.dot)} style={{ width: `${s[l.key] / s.dots * 100}%` }} />)}
+        </span>
+      </TooltipTrigger><TooltipContent>{LIFE.map(l => `${l.status} ${fmt(s[l.key])}`).join(" · ")}</TooltipContent></Tooltip></TooltipProvider>
+    </td>
     <td className={td} title="Seekers with ≥1 application">{fmt(s.applied)}</td>
-    {[0, 1, 2, 3].map(i => <td key={i} className={cn(td, "text-muted-foreground")}>—</td>)}
-    <td className={cn(td, "text-muted-foreground")}>—</td>
-    <td className="px-3 py-2.5 text-muted-foreground">—</td>
   </>;
 }
-function SeekerRow({ r, depth }: { r: ScopedSeekerRow; depth: number }) {
+function SeekerRow({ r }: { r: ScopedSeekerRow }) {
   return <tr className="border-t hover:bg-muted/30">
-    <td className="px-3 py-2.5" style={{ paddingLeft: 12 + depth * 24 }}><span className="font-mono text-xs break-all text-muted-foreground">{r.id}</span></td>
-    <td className={td}>1</td>
-    {LIFE.map(l => <td key={l.status} className={td}>{r.status === l.status && <span className={cn("inline-block h-2.5 w-2.5 rounded-full", l.dot)} aria-label={l.status} />}</td>)}
+    <td className="px-3 py-2.5"><span className="font-mono text-xs break-all text-muted-foreground">{r.id}</span></td>
+    <td className="px-3 py-2.5"><span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", SIGNAL[r.profileSignal])}>{r.profileSignal}</span></td>
     <td className={td}>{r.applied}</td><td className={td}>{r.accepted}</td><td className={td}>{r.rejected}</td><td className={td}>{r.pending}</td><td className={td}>{r.servicesAccepted}</td>
     <td className={cn(td, "text-muted-foreground")}>—</td>
-    <td className="px-3 py-2.5 whitespace-nowrap"><span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", SIGNAL[r.profileSignal])}>{r.profileSignal}</span><span className="ml-2 text-xs text-muted-foreground">{r.profileCompletion}% complete</span></td>
+    <td className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">{r.profileCompletion}% complete</td>
   </tr>;
+}
+function SeekerTable({ rows, children }: { rows: ScopedSeekerRow[]; children?: ReactNode }) {
+  const subtotal = rows.reduce((s, r) => ({ accepted: s.accepted + r.accepted, rejected: s.rejected + r.rejected, pending: s.pending + r.pending, services: s.services + r.servicesAccepted }), { accepted: 0, rejected: 0, pending: 0, services: 0 });
+  return <div className="bg-muted/20">
+    <p className="px-3 py-3 text-xs text-muted-foreground">{fmt(rows.length)} seekers · {fmt(subtotal.accepted)} accepted · {fmt(subtotal.rejected)} rejected · {fmt(subtotal.pending)} pending · {fmt(subtotal.services)} services</p>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm" aria-label="Seeker application outcomes">
+        <thead className="border-t bg-muted/50 text-xs text-muted-foreground"><tr>
+          {["Seeker", "Signal", "Applied", "Accepted", "Rejected", "Pending", "Services", "Source", "Profile"].map((h, i) => <th key={h} scope="col" className={cn("px-3 py-2 font-medium whitespace-nowrap", i >= 2 && i <= 7 ? "text-right" : "text-left")}>{h}</th>)}
+        </tr></thead>
+        <tbody>{rows.map(r => <SeekerRow key={r.id} r={r} />)}{children}</tbody>
+      </table>
+    </div>
+  </div>;
 }
 function passes(r: ScopedSeekerRow, f: Filters, now: number) {
   if (f.signal !== "all" && r.profileSignal !== f.signal) return false;
@@ -59,19 +75,17 @@ function passes(r: ScopedSeekerRow, f: Filters, now: number) {
   if (f.time !== "all") { const t = Date.parse(r.joined); if (!Number.isFinite(t) || now - t > Number(f.time) * 86400000) return false; }
   return true;
 }
-function SeekerRows({ instance, coordId, depth, filters }: { instance: string; coordId: string; depth: number; filters: Filters }) {
+function SeekerRows({ instance, coordId, filters }: { instance: string; coordId: string; filters: Filters }) {
   const fn = useServerFn(fetchScopedSeekers);
   const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
-  const pad = { paddingLeft: 12 + depth * 24 };
-  if (q.isPending) return <tr className="border-t"><td colSpan={13} className="px-3 py-3 text-xs text-muted-foreground" style={pad}><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
-  if (q.isError) return <tr className="border-t"><td colSpan={13} className="px-3 py-3 text-xs text-muted-foreground" style={pad}>Couldn't load seekers. <button className="underline" onClick={() => void q.refetch()}>Retry</button></td></tr>;
+  if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={4} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
+  if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={4} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const now = Date.now();
   const rows = q.data.rows.filter(r => passes(r, filters, now));
-  return <>
-    {rows.map(r => <SeekerRow key={r.id} r={r} depth={depth} />)}
-    {!rows.length && <tr className="border-t"><td colSpan={13} className="px-3 py-3 text-xs text-muted-foreground" style={pad}>No seekers match.</td></tr>}
-    {q.data.capped && <tr className="border-t"><td colSpan={13} className="px-3 py-2 text-xs text-muted-foreground" style={pad}>Showing first 1,000 profiles.</td></tr>}
-  </>;
+  return <tr className="border-t"><td colSpan={4} className="p-0"><SeekerTable rows={rows}>
+    {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
+    {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
+  </SeekerTable></td></tr>;
 }
 function FlatRows({ instance, coords, filters }: { instance: string; coords: Agg[]; filters: Filters }) {
   const fn = useServerFn(fetchScopedSeekers);
@@ -79,18 +93,18 @@ function FlatRows({ instance, coords, filters }: { instance: string; coords: Agg
   const now = Date.now();
   const rows = qs.flatMap(q => q.data?.rows ?? []).filter(r => passes(r, filters, now));
   const loading = qs.some(q => q.isPending);
-  return <>
-    {rows.map(r => <SeekerRow key={r.id} r={r} depth={0} />)}
-    {loading && <tr className="border-t"><td colSpan={13} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>}
-    {qs.some(q => q.isError) && <tr className="border-t"><td colSpan={13} className="px-3 py-3 text-xs text-muted-foreground">Some coordinators couldn't load.</td></tr>}
-    {!loading && !rows.length && <tr className="border-t"><td colSpan={13} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
-  </>;
+  return <SeekerTable rows={rows}>
+    {loading && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>}
+    {qs.some(q => q.isError) && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">Some coordinators couldn't load.</td></tr>}
+    {!loading && !rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
+    {qs.some(q => q.data?.capped) && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles per capped coordinator.</td></tr>}
+  </SeekerTable>;
 }
 function AggRow({ a, depth, open, onToggle }: { a: Agg; depth: number; open: boolean; onToggle: () => void }) {
   const Icon = open ? ChevronDown : ChevronRight;
   return <tr className="border-t hover:bg-muted/30">
     <td className="px-3 py-2.5" style={{ paddingLeft: 12 + depth * 24 }}>
-      <button type="button" onClick={onToggle} className="flex items-center gap-1.5 text-left font-semibold" aria-expanded={open}><Icon className="h-4 w-4 shrink-0 text-muted-foreground" />{a.name}</button>
+      <Button variant="ghost" onClick={onToggle} className="h-auto justify-start gap-1.5 whitespace-normal p-0 text-left font-semibold hover:bg-transparent" aria-expanded={open}><Icon className="h-4 w-4 shrink-0 text-muted-foreground" />{a.name}</Button>
     </td>
     <AggCells s={a.s} />
   </tr>;
@@ -141,26 +155,24 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
     </div>
 
     <div className="overflow-auto rounded-xl border bg-card">
-      <table className="w-full min-w-[1100px] text-sm">
+      {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
-          <tr><th rowSpan={2} className="px-3 py-2 text-left font-medium">Name</th><th rowSpan={2} className={th}>Seekers</th><th colSpan={4} className="px-3 py-2 text-center font-medium border-l">Lifecycle</th><th colSpan={5} className="px-3 py-2 text-center font-medium border-l">Applied · outcomes</th><th rowSpan={2} className={cn(th, "border-l")}>Source</th><th rowSpan={2} className="px-3 py-2 text-left font-medium">Profile</th></tr>
-          <tr>{LIFE.map(l => <th key={l.status} className={th}>{l.status}</th>)}{["Total", "Accepted", "Rejected", "Pending", "Services"].map(h => <th key={h} className={th}>{h}</th>)}</tr>
+          <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className="px-3 py-2 text-left font-medium">Lifecycle</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th></tr>
         </thead>
         <tbody>
           {level === "org" && orgs.map(o => <Fragment key={o.id}>
             <AggRow a={o} depth={0} open={open.has(o.id)} onToggle={() => toggle(o.id)} />
             {open.has(o.id) && o.coords.map(c => <Fragment key={c.id}>
               <AggRow a={c} depth={1} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} depth={2} filters={filters} />}
+              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} />}
             </Fragment>)}
           </Fragment>)}
           {level === "coord" && coords.map(c => <Fragment key={c.id}>
             <AggRow a={c} depth={0} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} depth={1} filters={filters} />}
+            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} />}
           </Fragment>)}
-          {level === "flat" && <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} />}
         </tbody>
-      </table>
+      </table>}
     </div>
     <p className="text-xs text-muted-foreground">Aggregate rows show seeker counts from the district rollup; per-outcome splits appear on seeker rows. Source (voice/QR) data isn't available yet.</p>
   </section>;
