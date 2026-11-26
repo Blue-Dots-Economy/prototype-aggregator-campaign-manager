@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useLiveRollup, Freshness, LiveState } from "./live-rollup";
+import { useLiveRollup, useLiveMembers, MemberTable, Freshness, LiveState } from "./live-rollup";
 import { fetchScopedSeekers, type ScopedSeekerRow } from "@/lib/scoped-seekers.functions";
 import type { RollupStats } from "@/lib/rollup.functions";
 
@@ -30,7 +30,25 @@ const SIG: { key: "strong" | "moderate" | "weak"; label: string; dot: string }[]
 ];
 const fmt = (n: number) => n.toLocaleString("en-IN");
 type Level = "org" | "coord" | "flat";
-type Agg = { id: string; name: string; s: RollupStats };
+type Agg = { id: string; name: string; s: RollupStats; lp: number };
+type View = "seeker" | "provider";
+function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  return <div className="inline-flex rounded-lg border bg-muted/40 p-0.5" role="group">{options.map(([v, t]) => <Button key={v} variant="ghost" aria-pressed={value === v} onClick={() => onChange(v)} className={cn("h-auto rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-transparent", value === v && "bg-background text-foreground shadow-sm hover:bg-background")}>{t}</Button>)}</div>;
+}
+function ProviderCells({ s, lp }: { s: RollupStats; lp: number }) {
+  return <>
+    <td className={cn(td, s.dots ? "" : "text-muted-foreground")}>{fmt(s.dots)}</td>
+    <td className={cn(td, s.new7d ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{fmt(s.new7d)}</td>
+    <td className={cn(td, s.active ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground")}>{fmt(s.active)}</td>
+    <td className={cn(td, s.inactive ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>{fmt(s.inactive)}</td>
+    <td className={cn(td, lp ? "text-violet-400" : "text-muted-foreground")}>{fmt(lp)}</td>
+  </>;
+}
+function ProviderRows({ instance, coordId }: { instance: string; coordId: string }) {
+  const q = useLiveMembers(instance, undefined, coordId, "provider", true);
+  if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading providers…</td></tr>;
+  return <tr className="border-t"><td colSpan={6} className="p-2"><MemberTable members={q.data ?? []} /></td></tr>;
+}
 type Filters = { time: "all" | "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"; signal: "all" | ScopedSeekerRow["profileSignal"]; status: "all" | Status };
 
 function FilterMenu<T extends string>({ label, value, options, onValueChange, active = value !== "all" }: { label: string; value: T; options: [T, string][]; onValueChange: (v: T) => void; active?: boolean }) {
@@ -150,13 +168,13 @@ function FlatRows({ instance, coords, filters, from, to, source }: { instance: s
     {qs.some(q => q.data?.capped) && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles per capped coordinator.</td></tr>}
   </SeekerTable>;
 }
-function AggRow({ a, depth, open, onToggle }: { a: Agg; depth: number; open: boolean; onToggle: () => void }) {
+function AggRow({ a, depth, open, onToggle, view }: { a: Agg; depth: number; open: boolean; onToggle: () => void; view: View }) {
   const Icon = open ? ChevronDown : ChevronRight;
   return <tr className="border-t hover:bg-muted/30">
     <td className="px-3 py-2.5" style={{ paddingLeft: 12 + depth * 24 }}>
       <Button variant="ghost" onClick={onToggle} className="h-auto justify-start gap-1.5 whitespace-normal p-0 text-left font-semibold hover:bg-transparent" aria-expanded={open}><Icon className="h-4 w-4 shrink-0 text-muted-foreground" />{a.name}</Button>
     </td>
-    <AggCells s={a.s} />
+    {view === "provider" ? <ProviderCells s={a.s} lp={a.lp} /> : <AggCells s={a.s} />}
   </tr>;
 }
 
@@ -165,17 +183,22 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   const [level, setLevel] = useState<Level>("org");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<Filters>({ time: "all", signal: "all", status: "all" });
+  const [view, setView] = useState<View>("seeker");
   const [source, setSource] = useState<"all" | "voice" | "qr" | "bulk" | "self">("all");
   const scope = useMemo(() => ({ ...timeRange(filters.time, Date.now()), source: source === "all" ? null : source }), [filters.time, source]);
   const live = useLiveRollup(instance, undefined, undefined, scope);
   const windowed = filters.time !== "all" || source !== "all";
   const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const liveOrgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })).filter(c => !windowed || c.s.dots > 0) })).filter(o => !windowed || o.s.dots > 0), [live.orgs, windowed]);
+  const liveOrgs = useMemo(() => { const hide = windowed || view === "provider"; return live.orgs.map(o => ({ id: o.id, name: o.name, s: view === "provider" ? o.providers : o.seekers, lp: o.livePostings, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: view === "provider" ? c.providers : c.seekers, lp: c.livePostings })).filter(c => !hide || c.s.dots > 0) })).filter(o => !hide || o.s.dots > 0); }, [live.orgs, windowed, view]);
+  const liveSeekerOrgs = useMemo(() => live.orgs.map(o => o.seekers).filter(s => !windowed || s.dots > 0), [live.orgs, windowed]);
+  const lastSeekerOrgs = useRef<RollupStats[]>([]);
+  useEffect(() => { if (liveSeekerOrgs.length) lastSeekerOrgs.current = liveSeekerOrgs; }, [liveSeekerOrgs]);
+  const seekerOrgs = liveSeekerOrgs.length ? liveSeekerOrgs : lastSeekerOrgs.current;
   const lastOrgs = useRef<typeof liveOrgs>([]);
   useEffect(() => { if (liveOrgs.length) lastOrgs.current = liveOrgs; }, [liveOrgs]);
   const orgs = liveOrgs.length ? liveOrgs : lastOrgs.current;
   const coords = useMemo(() => orgs.flatMap(o => o.coords), [orgs]);
-  const totals = useMemo(() => orgs.reduce((t, o) => ({ new7d: t.new7d + o.s.new7d, active: t.active + o.s.active, atRisk: t.atRisk + o.s.atRisk, inactive: t.inactive + o.s.inactive, dots: t.dots + o.s.dots, applied: t.applied + o.s.applied, strong: t.strong + o.s.strong, moderate: t.moderate + o.s.moderate, weak: t.weak + o.s.weak, live: t.live + o.s.live, draft: t.draft + o.s.draft }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 } as RollupStats), [orgs]);
+  const totals = useMemo(() => seekerOrgs.reduce((t, s) => ({ new7d: t.new7d + s.new7d, active: t.active + s.active, atRisk: t.atRisk + s.atRisk, inactive: t.inactive + s.inactive, dots: t.dots + s.dots, applied: t.applied + s.applied, strong: t.strong + s.strong, moderate: t.moderate + s.moderate, weak: t.weak + s.weak, live: t.live + s.live, draft: t.draft + s.draft }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 } as RollupStats), [seekerOrgs]);
 
   if (live.loading && !orgs.length) return <LiveState loading retry={live.retry} />;
   if (live.isError || !live.available) return <LiveState loading={false} retry={live.retry} />;
@@ -199,12 +222,13 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
       <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />Scope</span>
       <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium"><MapPin className="h-3.5 w-3.5" />{district}</span>
+      <Seg value={view} options={[["seeker", "Seekers"], ["provider", "Providers"]]} onChange={setView} />
       <FilterMenu label="Level" value={level} options={[["org", "Organisation"], ["coord", "Coordinator"], ["flat", "Seekers (flat)"]]} onValueChange={setLevel} active={false} />
-      <FilterMenu label="Source" value={source} options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"], ["bulk", "Bulk"], ["self", "Self"]]} onValueChange={setSource} />
+      {view === "seeker" && <FilterMenu label="Source" value={source} options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"], ["bulk", "Bulk"], ["self", "Self"]]} onValueChange={setSource} />}
       <FilterMenu label="Period" value={filters.time} options={[["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["this_week", "This week"], ["last_week", "Last week"], ["this_month", "This month"], ["last_month", "Last month"]]} onValueChange={v => setFilters(f => ({ ...f, time: v }))} />
       <span className="mx-1 h-5 w-px bg-border" />
       <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-slate-400/60" />Refine</span>
-      <FilterMenu label="Signal" value={filters.signal} options={[["all", "All"], ["Strong", "Strong"], ["Moderate", "Moderate"], ["Weak", "Weak"]]} onValueChange={v => setFilters(f => ({ ...f, signal: v }))} />
+      {view === "seeker" && <FilterMenu label="Signal" value={filters.signal} options={[["all", "All"], ["Strong", "Strong"], ["Moderate", "Moderate"], ["Weak", "Weak"]]} onValueChange={v => setFilters(f => ({ ...f, signal: v }))} />}
       <FilterMenu label="Status" value={filters.status} options={[["all", "All"], ["New", "New"], ["Active", "Active"], ["At Risk", "At Risk"], ["Inactive", "Inactive"]]} onValueChange={v => setFilters(f => ({ ...f, status: v }))} />
       <span className="flex-1" />
       {activeCount > 0 && <Button variant="ghost" className="inline-flex h-auto items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1.5 text-xs text-muted-foreground hover:border-border hover:bg-transparent hover:text-foreground" onClick={() => { setFilters({ time: "all", signal: "all", status: "all" }); setSource("all"); }}><X className="h-3 w-3" />{activeCount} active · Clear</Button>}
@@ -213,19 +237,19 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
     <div className={cn("overflow-auto rounded-xl border bg-card", live.fetching && "opacity-60 transition-opacity")}>
       {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} from={scope.from} to={scope.to} source={scope.source} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
-          <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 published profile">Live</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with only draft profiles">Draft</th><th scope="col" className={cn(th, "tabular-nums")}>Profile status</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>
+          {view === "provider" ? <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th>{["Providers", "New", "Active", "Inactive", "Live postings"].map(h => <th key={h} scope="col" className={cn(th, "tabular-nums")}>{h}</th>)}</tr> : <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 published profile">Live</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with only draft profiles">Draft</th><th scope="col" className={cn(th, "tabular-nums")}>Profile status</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>}
         </thead>
         <tbody>
           {level === "org" && orgs.map(o => <Fragment key={o.id}>
-            <AggRow a={o} depth={0} open={open.has(o.id)} onToggle={() => toggle(o.id)} />
+            <AggRow a={o} depth={0} open={open.has(o.id)} onToggle={() => toggle(o.id)} view={view} />
             {open.has(o.id) && o.coords.map(c => <Fragment key={c.id}>
-              <AggRow a={c} depth={1} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={scope.from} to={scope.to} source={scope.source} />}
+              <AggRow a={c} depth={1} open={open.has(c.id)} onToggle={() => toggle(c.id)} view={view} />
+              {open.has(c.id) && (view === "provider" ? <ProviderRows instance={instance} coordId={c.id} /> : <SeekerRows instance={instance} coordId={c.id} filters={filters} from={scope.from} to={scope.to} source={scope.source} />)}
             </Fragment>)}
           </Fragment>)}
           {level === "coord" && coords.map(c => <Fragment key={c.id}>
-            <AggRow a={c} depth={0} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={scope.from} to={scope.to} source={scope.source} />}
+            <AggRow a={c} depth={0} open={open.has(c.id)} onToggle={() => toggle(c.id)} view={view} />
+            {open.has(c.id) && (view === "provider" ? <ProviderRows instance={instance} coordId={c.id} /> : <SeekerRows instance={instance} coordId={c.id} filters={filters} from={scope.from} to={scope.to} source={scope.source} />)}
           </Fragment>)}
         </tbody>
       </table>}
