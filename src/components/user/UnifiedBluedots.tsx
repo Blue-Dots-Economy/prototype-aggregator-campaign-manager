@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X } from "lucide-react";
@@ -170,7 +170,10 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   const live = useLiveRollup(instance, undefined, undefined, scope);
   const windowed = filters.time !== "all" || source !== "all";
   const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const orgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })).filter(c => !windowed || c.s.dots > 0) })).filter(o => !windowed || o.s.dots > 0), [live.orgs, windowed]);
+  const liveOrgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })).filter(c => !windowed || c.s.dots > 0) })).filter(o => !windowed || o.s.dots > 0), [live.orgs, windowed]);
+  const lastOrgs = useRef<typeof liveOrgs>([]);
+  useEffect(() => { if (liveOrgs.length) lastOrgs.current = liveOrgs; }, [liveOrgs]);
+  const orgs = liveOrgs.length ? liveOrgs : lastOrgs.current;
   const coords = useMemo(() => orgs.flatMap(o => o.coords), [orgs]);
   const totals = useMemo(() => orgs.reduce((t, o) => ({ new7d: t.new7d + o.s.new7d, active: t.active + o.s.active, atRisk: t.atRisk + o.s.atRisk, inactive: t.inactive + o.s.inactive, dots: t.dots + o.s.dots, applied: t.applied + o.s.applied, strong: t.strong + o.s.strong, moderate: t.moderate + o.s.moderate, weak: t.weak + o.s.weak, live: t.live + o.s.live, draft: t.draft + o.s.draft }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 } as RollupStats), [orgs]);
 
