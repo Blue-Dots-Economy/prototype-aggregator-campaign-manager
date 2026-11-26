@@ -22,3 +22,5 @@
 - Content-write endpoints validate the signed login credential against the active app-user registry and reject read-only roles; browser roles only control affordances.
 
 - The default My Blue Dots profile view reads bounded keyset slices from the pipeline, joins instance-scoped apply actions, and stitches slices client-side so full-table responses never exceed the framework cap; role hierarchy RPC views remain separate.
+
+- Scoped seeker drawers use one source get_bluedot_seekers RPC capped at 1,000 rows; preserve previous query results during scope changes to avoid blanking the view.

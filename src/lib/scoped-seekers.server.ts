@@ -1,5 +1,5 @@
 import { blueDotsClient } from "./blue-dots-auth.server";
-import { mapLiveProfile, type ApplyStats, type LiveProfile, type Seeker } from "./my-blue-dots-live.model";
+import { type Seeker } from "./my-blue-dots-live.model";
 
 export type ScopedSeekerRow = {
   id: string; userId: string; joined: string; profileSignal: Seeker["profileSignal"]; profileCompletion: number;
@@ -8,88 +8,21 @@ export type ScopedSeekerRow = {
 };
 export type ScopedSeekers = { rows: ScopedSeekerRow[]; capped: boolean };
 const CAP = 1000;
-const PAGE = 500;
-const chunks = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
-const sourceLabel = (value: string | null | undefined): ScopedSeekerRow["source"] =>
-  value === "voice" ? "Voice" : value === "link" ? "QR" : value === "bulk" || value === "jobstack_migration" ? "Bulk" : value === "self" ? "Self" : "—";
-const requestedSource = (value: string | null | undefined): ScopedSeekerRow["source"] | null =>
-  value === "voice" ? "Voice" : value === "qr" ? "QR" : value === "bulk" ? "Bulk" : value === "self" ? "Self" : null;
 
 export async function loadScopedSeekers(instance: string, coordinatorId: string, from?: string | null, to?: string | null, source?: string | null): Promise<ScopedSeekers> {
   const db = blueDotsClient();
-  const userIds: string[] = [];
-  for (let last = ""; ;) {
-    let q = db.from("bluedot_users").select("id").eq("onboarded_by_org_id", coordinatorId).order("id").limit(PAGE);
-    if (from) q = q.gte("created_at", from);
-    if (to) q = q.lt("created_at", to);
-    if (last) q = q.gt("id", last);
-    const { data, error } = await q;
-    if (error) throw new Error("Couldn't load seekers");
-    const rows = (data ?? []) as { id: string }[];
-    userIds.push(...rows.map(r => r.id));
-    if (!rows.length || userIds.length > 20000) break;
-    last = rows[rows.length - 1]!.id;
-  }
-  const sources = new Map<string, string | null>();
-  for (const ids of chunks(userIds, 150)) {
-    const { data, error } = await db.from("bluedot_profile_aggregators").select("profile_id,onboarded_via").eq("instance", instance).in("user_id", ids);
-    if (error) throw new Error("Couldn't load seekers");
-    for (const row of (data ?? []) as { profile_id: string; onboarded_via: string | null }[]) sources.set(row.profile_id, row.onboarded_via);
-  }
-  const wantedSource = requestedSource(source);
-  const profiles: LiveProfile[] = [];
-  for (const ids of chunks(userIds, 150)) {
-    for (let last = ""; profiles.length <= CAP;) {
-      let q = db.from("bluedot_seeker_profiles").select("item_id,created_by,created_at,instance,role_wanted_raw,age_masked,education_category,work_experience,is_default_geo")
-        .eq("instance", instance).in("created_by", ids).order("item_id").limit(PAGE);
-      if (last) q = q.gt("item_id", last);
-      const { data, error } = await q;
-      if (error) throw new Error("Couldn't load seekers");
-      const rows = (data ?? []) as LiveProfile[];
-      for (const profile of rows) {
-        if (wantedSource && sourceLabel(sources.get(profile.item_id)) !== wantedSource) continue;
-        profiles.push(profile);
-      }
-      if (!rows.length) break;
-      last = rows[rows.length - 1]!.item_id;
-    }
-    if (profiles.length > CAP) break;
-  }
-  const capped = profiles.length > CAP;
-  profiles.sort((a, b) => a.item_id.localeCompare(b.item_id));
-  const kept = profiles.slice(0, CAP);
-  const owners = [...new Set(kept.map(p => p.created_by).filter((x): x is string => !!x))];
-  const stats = new Map<string, ApplyStats & { services: number }>();
-  for (const ids of chunks(owners, 150)) {
-    for (let last = ""; ;) {
-      let q = db.from("bluedot_item_actions").select("action_id,source_item_owner,action_status,target_item_domain,created_at")
-        .eq("action_type", "apply").eq("instance", instance).in("source_item_owner", ids).order("action_id").limit(PAGE);
-      if (last) q = q.gt("action_id", last);
-      const { data, error } = await q;
-      if (error) throw new Error("Couldn't load seekers");
-      const rows = (data ?? []) as { action_id: string; source_item_owner: string; action_status: string | null; target_item_domain: string | null; created_at: string | null }[];
-      for (const a of rows) {
-        const s = stats.get(a.source_item_owner) ?? { total: 0, accepted: 0, rejected: 0, pending: 0, cancelled: 0, latest: null, services: 0 };
-        s.total++;
-        if (a.action_status === "accepted") { s.accepted++; if (a.target_item_domain === "service_provider") s.services++; }
-        else if (a.action_status === "rejected") s.rejected++;
-        else if (a.action_status === "created") s.pending++;
-        else if (a.action_status === "cancelled") s.cancelled++;
-        if (a.created_at && (!s.latest || Date.parse(a.created_at) > Date.parse(s.latest))) s.latest = a.created_at;
-        stats.set(a.source_item_owner, s);
-      }
-      if (rows.length < 1) break;
-      last = rows[rows.length - 1]!.action_id;
-    }
-  }
-  const now = Date.now();
-  const rows = kept.map(p => {
-    const s = p.created_by ? stats.get(p.created_by) : undefined;
-    const apps = new Map<string, ApplyStats>(s ? [[`${p.instance}:${p.item_id}`, s]] : []);
-    const m = mapLiveProfile(p, apps, now);
-    return { id: m.id, userId: m.userId, joined: m.createdOn, profileSignal: m.profileSignal, profileCompletion: m.profileCompletion, status: m.status,
-      applied: s?.total ?? 0, accepted: s?.accepted ?? 0, rejected: s?.rejected ?? 0, pending: s?.pending ?? 0, servicesAccepted: s?.services ?? 0,
-      source: sourceLabel(sources.get(p.item_id)) };
+  const { data, error } = await db.rpc("get_bluedot_seekers", {
+    p_instance: instance, p_coordinator: coordinatorId,
+    p_from: from ?? null, p_to: to ?? null, p_source: source ?? null, p_limit: CAP,
   });
+  if (error) throw new Error("Couldn't load seekers");
+  const all = (data ?? []) as Array<{ item_id: string; joined: string | null; profile_signal: ScopedSeekerRow["profileSignal"]; profile_completion: number; status: ScopedSeekerRow["status"]; applied: number; accepted: number; rejected: number; pending: number; services: number; source: ScopedSeekerRow["source"] }>;
+  const capped = all.length > CAP;
+  const rows: ScopedSeekerRow[] = all.slice(0, CAP).map(r => ({
+    id: r.item_id, userId: "", joined: r.joined ?? "",
+    profileSignal: r.profile_signal, profileCompletion: r.profile_completion, status: r.status,
+    applied: r.applied, accepted: r.accepted, rejected: r.rejected, pending: r.pending, servicesAccepted: r.services,
+    source: r.source,
+  }));
   return { rows, capped };
 }

@@ -25,3 +25,6 @@
 - [ ] Donation flow config — needs the user to add secrets: `ZEFFY_API_KEY`, `ZEFFY_WEBHOOK_TOKEN`
       (same value pasted into Zeffy's webhook config), `RESEND_API_KEY`,
       `ZEFFY_FORM_ONETIME_URL`, `ZEFFY_FORM_MONTHLY_URL`
+
+- [x] Replace scoped seeker paging with one bounded RPC and preserve previous filter results with subtle updating opacity.
+- [x] Verify scoped seeker mapping/cap, regression tests, and live drawer/filter updates.

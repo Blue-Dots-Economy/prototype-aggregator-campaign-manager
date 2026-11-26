@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -129,7 +129,7 @@ function passes(r: ScopedSeekerRow, f: Filters) {
 }
 function SeekerRows({ instance, coordId, filters, from, to, source }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
-  const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to, source } }), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
   if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const rows = q.data.rows.filter(r => passes(r, filters));
@@ -140,7 +140,7 @@ function SeekerRows({ instance, coordId, filters, from, to, source }: { instance
 }
 function FlatRows({ instance, coords, filters, from, to, source }: { instance: string; coords: Agg[]; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
-  const qs = useQueries({ queries: coords.map(c => ({ queryKey: ["scoped-seekers", instance, c.id, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: c.id, from, to, source } }), staleTime: 5 * 60_000 })) });
+  const qs = useQueries({ queries: coords.map(c => ({ queryKey: ["scoped-seekers", instance, c.id, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: c.id, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 })) });
   const rows = qs.flatMap(q => q.data?.rows ?? []).filter(r => passes(r, filters));
   const loading = qs.some(q => q.isPending);
   return <SeekerTable rows={rows}>
@@ -207,7 +207,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       {activeCount > 0 && <Button variant="ghost" className="inline-flex h-auto items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1.5 text-xs text-muted-foreground hover:border-border hover:bg-transparent hover:text-foreground" onClick={() => { setFilters({ time: "all", signal: "all", status: "all" }); setSource("all"); }}><X className="h-3 w-3" />{activeCount} active · Clear</Button>}
     </div>
 
-    <div className="overflow-auto rounded-xl border bg-card">
+    <div className={cn("overflow-auto rounded-xl border bg-card", live.fetching && "opacity-60 transition-opacity")}>
       {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} from={scope.from} to={scope.to} source={scope.source} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
           <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 published profile">Live</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with only draft profiles">Draft</th><th scope="col" className={cn(th, "tabular-nums")}>Profile status</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>

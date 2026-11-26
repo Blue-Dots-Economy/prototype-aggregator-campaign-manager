@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { fetchDistrictRollup, fetchArmMembers, type RollupMember } from "@/lib/rollup.functions";
 export { nodeFor, type LiveNode, type ParticipantView } from "@/lib/rollup.view";
@@ -21,12 +21,13 @@ export function useLiveRollup(instance: string, aggregatorId?: string, coordinat
     queryFn: ({ pageParam }) => fn({ data: { instance, aggregatorId, coordinatorId, offset: pageParam, from: scope.from, to: scope.to, source: scope.source } }),
     getNextPageParam: page => page.available ? page.nextOffset ?? undefined : undefined,
     staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
   useEffect(() => { if (query.hasNextPage && !query.isFetching && !query.isError) void query.fetchNextPage(); }, [query.hasNextPage, query.isFetching, query.isError, query.fetchNextPage]);
   const available = !!query.data && query.data.pages.every(p => p.available);
   const orgs = query.data?.pages.flatMap(p => p.available ? p.orgs : []) ?? [];
   const first = query.data?.pages[0];
-  return { ...query, orgs, available, updatedAt: first?.available ? first.updatedAt : null, refreshing: refresh.isPending, refreshError: refresh.error?.message, refresh: () => refresh.mutate(), loading: query.isPending || (query.hasNextPage && !query.isError), retry: () => void query.refetch() };
+  return { ...query, fetching: query.isFetching, orgs, available, updatedAt: first?.available ? first.updatedAt : null, refreshing: refresh.isPending, refreshError: refresh.error?.message, refresh: () => refresh.mutate(), loading: query.isPending || (query.hasNextPage && !query.isError), retry: () => void query.refetch() };
 }
 export function Freshness({ updatedAt, error }: { updatedAt?: string | null; error?: string }) {
   return <span className="text-xs text-muted-foreground" role={error ? "alert" : undefined}>{error ?? (updatedAt ? `Updated ${formatDistanceToNow(new Date(updatedAt), { addSuffix: true })}` : "")}</span>;
