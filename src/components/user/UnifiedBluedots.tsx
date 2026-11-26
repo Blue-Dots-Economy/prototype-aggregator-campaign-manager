@@ -105,30 +105,31 @@ function timeWindow(key: Filters["time"], now: number): [number, number] | null 
   }
   return null;
 }
-function passes(r: ScopedSeekerRow, f: Filters, now: number) {
+function timeRange(key: Filters["time"], now: number): { from: string | null; to: string | null } {
+  const w = timeWindow(key, now);
+  if (!w) return { from: null, to: null };
+  return { from: new Date(w[0]).toISOString(), to: Number.isFinite(w[1]) ? new Date(w[1]).toISOString() : null };
+}
+function passes(r: ScopedSeekerRow, f: Filters) {
   if (f.signal !== "all" && r.profileSignal !== f.signal) return false;
   if (f.status !== "all" && r.status !== f.status) return false;
-  const win = timeWindow(f.time, now);
-  if (win) { const t = Date.parse(r.joined); if (!Number.isFinite(t) || t < win[0] || t >= win[1]) return false; }
   return true;
 }
-function SeekerRows({ instance, coordId, filters }: { instance: string; coordId: string; filters: Filters }) {
+function SeekerRows({ instance, coordId, filters, from, to }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
-  const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to } }), staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
   if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
-  const now = Date.now();
-  const rows = q.data.rows.filter(r => passes(r, filters, now));
+  const rows = q.data.rows.filter(r => passes(r, filters));
   return <tr className="border-t"><td colSpan={7} className="p-0"><SeekerTable rows={rows}>
     {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
     {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
   </SeekerTable></td></tr>;
 }
-function FlatRows({ instance, coords, filters }: { instance: string; coords: Agg[]; filters: Filters }) {
+function FlatRows({ instance, coords, filters, from, to }: { instance: string; coords: Agg[]; filters: Filters; from: string | null; to: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
-  const qs = useQueries({ queries: coords.map(c => ({ queryKey: ["scoped-seekers", instance, c.id], queryFn: () => fn({ data: { instance, coordinatorId: c.id } }), staleTime: 5 * 60_000 })) });
-  const now = Date.now();
-  const rows = qs.flatMap(q => q.data?.rows ?? []).filter(r => passes(r, filters, now));
+  const qs = useQueries({ queries: coords.map(c => ({ queryKey: ["scoped-seekers", instance, c.id, from ?? "", to ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: c.id, from, to } }), staleTime: 5 * 60_000 })) });
+  const rows = qs.flatMap(q => q.data?.rows ?? []).filter(r => passes(r, filters));
   const loading = qs.some(q => q.isPending);
   return <SeekerTable rows={rows}>
     {loading && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>}
@@ -149,12 +150,14 @@ function AggRow({ a, depth, open, onToggle }: { a: Agg; depth: number; open: boo
 
 export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { district: string; readOnly?: boolean }) {
   const instance = INSTANCE[district] ?? "UP";
-  const live = useLiveRollup(instance);
   const [level, setLevel] = useState<Level>("org");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<Filters>({ time: "all", signal: "all", status: "all" });
+  const range = useMemo(() => timeRange(filters.time, Date.now()), [filters.time]);
+  const live = useLiveRollup(instance, undefined, undefined, range);
+  const windowed = filters.time !== "all";
   const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const orgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })) })), [live.orgs]);
+  const orgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })).filter(c => !windowed || c.s.dots > 0) })).filter(o => !windowed || o.s.dots > 0), [live.orgs, windowed]);
   const coords = useMemo(() => orgs.flatMap(o => o.coords), [orgs]);
   const totals = useMemo(() => orgs.reduce((t, o) => ({ new7d: t.new7d + o.s.new7d, active: t.active + o.s.active, atRisk: t.atRisk + o.s.atRisk, inactive: t.inactive + o.s.inactive, dots: t.dots + o.s.dots, applied: t.applied + o.s.applied, strong: t.strong + o.s.strong, moderate: t.moderate + o.s.moderate, weak: t.weak + o.s.weak, live: t.live + o.s.live, draft: t.draft + o.s.draft }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 } as RollupStats), [orgs]);
 
@@ -188,11 +191,11 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       {chip("time", [["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["this_week", "This Week"], ["last_week", "Last Week"], ["this_month", "This Month"], ["last_month", "Last Month"]])}
       {chip("signal", [["all", "All profiles"], ["Strong", "Strong"], ["Moderate", "Moderate"], ["Weak", "Weak"]])}
       {chip("status", [["all", "All status"], ["New", "New"], ["Active", "Active"], ["At Risk", "At Risk"], ["Inactive", "Inactive"]])}
-      <span className="text-xs text-muted-foreground">Filters apply to seeker rows.</span>
+      <span className="text-xs text-muted-foreground">Time filter applies across the whole view; signal &amp; status refine seeker rows.</span>
     </div>
 
     <div className="overflow-auto rounded-xl border bg-card">
-      {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} /> : <table className="w-full text-sm">
+      {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} from={range.from} to={range.to} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
           <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 published profile">Live</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with only draft profiles">Draft</th><th scope="col" className={cn(th, "tabular-nums")}>Profile status</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>
         </thead>
@@ -201,12 +204,12 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
             <AggRow a={o} depth={0} open={open.has(o.id)} onToggle={() => toggle(o.id)} />
             {open.has(o.id) && o.coords.map(c => <Fragment key={c.id}>
               <AggRow a={c} depth={1} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} />}
+              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={range.from} to={range.to} />}
             </Fragment>)}
           </Fragment>)}
           {level === "coord" && coords.map(c => <Fragment key={c.id}>
             <AggRow a={c} depth={0} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} />}
+            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={range.from} to={range.to} />}
           </Fragment>)}
         </tbody>
       </table>}

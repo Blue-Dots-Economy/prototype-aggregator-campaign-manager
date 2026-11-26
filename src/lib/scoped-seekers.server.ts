@@ -10,11 +10,13 @@ const CAP = 1000;
 const PAGE = 500;
 const chunks = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
-export async function loadScopedSeekers(instance: string, coordinatorId: string): Promise<ScopedSeekers> {
+export async function loadScopedSeekers(instance: string, coordinatorId: string, from?: string | null, to?: string | null): Promise<ScopedSeekers> {
   const db = blueDotsClient();
   const userIds: string[] = [];
   for (let last = ""; ;) {
     let q = db.from("bluedot_users").select("id").eq("onboarded_by_org_id", coordinatorId).order("id").limit(PAGE);
+    if (from) q = q.gte("created_at", from);
+    if (to) q = q.lt("created_at", to);
     if (last) q = q.gt("id", last);
     const { data, error } = await q;
     if (error) throw new Error("Couldn't load seekers");

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { User, LoaderCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-export function useLiveRollup(instance: string, aggregatorId?: string, coordinatorId?: string) {
+export function useLiveRollup(instance: string, aggregatorId?: string, coordinatorId?: string, window: { from: string | null; to: string | null } = { from: null, to: null }) {
   const fn = useServerFn(fetchDistrictRollup);
   const cache = useQueryClient();
   const refresh = useMutation({ mutationFn: async () => {
@@ -17,8 +17,8 @@ export function useLiveRollup(instance: string, aggregatorId?: string, coordinat
     await cache.invalidateQueries({ queryKey: ["blue-dots-members"] });
   } });
   const query = useInfiniteQuery({
-    queryKey: ["live-blue-dots", instance, aggregatorId ?? "", coordinatorId ?? ""], initialPageParam: 0,
-    queryFn: ({ pageParam }) => fn({ data: { instance, aggregatorId, coordinatorId, offset: pageParam } }),
+    queryKey: ["live-blue-dots", instance, aggregatorId ?? "", coordinatorId ?? "", window.from ?? "", window.to ?? ""], initialPageParam: 0,
+    queryFn: ({ pageParam }) => fn({ data: { instance, aggregatorId, coordinatorId, offset: pageParam, from: window.from, to: window.to } }),
     getNextPageParam: page => page.available ? page.nextOffset ?? undefined : undefined,
     staleTime: 5 * 60_000,
   });
