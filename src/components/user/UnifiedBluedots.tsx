@@ -66,7 +66,7 @@ function SeekerRow({ r }: { r: ScopedSeekerRow }) {
     <td className="px-3 py-2.5"><span className="font-mono text-xs break-all text-muted-foreground">{r.id}</span></td>
     <td className="px-3 py-2.5"><span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", SIGNAL[r.profileSignal])}>{r.profileSignal}</span></td>
     <td className={td}>{r.applied}</td><td className={td}>{r.accepted}</td><td className={td}>{r.rejected}</td><td className={td}>{r.pending}</td><td className={td}>{r.servicesAccepted}</td>
-    <td className={cn(td, "text-muted-foreground")}>—</td>
+    <td className={cn(td, r.source === "—" && "text-muted-foreground")}>{r.source}</td>
     <td className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">{r.profileCompletion}% complete</td>
   </tr>;
 }
@@ -115,9 +115,9 @@ function passes(r: ScopedSeekerRow, f: Filters) {
   if (f.status !== "all" && r.status !== f.status) return false;
   return true;
 }
-function SeekerRows({ instance, coordId, filters, from, to }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null }) {
+function SeekerRows({ instance, coordId, filters, from, to, source }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
-  const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to } }), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to, source } }), staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
   if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const rows = q.data.rows.filter(r => passes(r, filters));
@@ -126,9 +126,9 @@ function SeekerRows({ instance, coordId, filters, from, to }: { instance: string
     {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
   </SeekerTable></td></tr>;
 }
-function FlatRows({ instance, coords, filters, from, to }: { instance: string; coords: Agg[]; filters: Filters; from: string | null; to: string | null }) {
+function FlatRows({ instance, coords, filters, from, to, source }: { instance: string; coords: Agg[]; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
-  const qs = useQueries({ queries: coords.map(c => ({ queryKey: ["scoped-seekers", instance, c.id, from ?? "", to ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: c.id, from, to } }), staleTime: 5 * 60_000 })) });
+  const qs = useQueries({ queries: coords.map(c => ({ queryKey: ["scoped-seekers", instance, c.id, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: c.id, from, to, source } }), staleTime: 5 * 60_000 })) });
   const rows = qs.flatMap(q => q.data?.rows ?? []).filter(r => passes(r, filters));
   const loading = qs.some(q => q.isPending);
   return <SeekerTable rows={rows}>
@@ -153,9 +153,10 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   const [level, setLevel] = useState<Level>("org");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<Filters>({ time: "all", signal: "all", status: "all" });
-  const range = useMemo(() => timeRange(filters.time, Date.now()), [filters.time]);
-  const live = useLiveRollup(instance, undefined, undefined, range);
-  const windowed = filters.time !== "all";
+  const [source, setSource] = useState<"all" | "voice" | "qr" | "bulk" | "self">("all");
+  const scope = useMemo(() => ({ ...timeRange(filters.time, Date.now()), source: source === "all" ? null : source }), [filters.time, source]);
+  const live = useLiveRollup(instance, undefined, undefined, scope);
+  const windowed = filters.time !== "all" || source !== "all";
   const toggle = (id: string) => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const orgs = useMemo(() => live.orgs.map(o => ({ id: o.id, name: o.name, s: o.seekers, coords: o.coordinators.map(c => ({ id: c.id, name: c.name, s: c.seekers })).filter(c => !windowed || c.s.dots > 0) })).filter(o => !windowed || o.s.dots > 0), [live.orgs, windowed]);
   const coords = useMemo(() => orgs.flatMap(o => o.coords), [orgs]);
@@ -185,7 +186,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       <span className="text-xs text-muted-foreground">Start level</span>
       <Seg value={level} options={[["org", "Organisation"], ["coord", "Coordinator"], ["flat", "Seekers (flat)"]]} onChange={setLevel} />
       <span className="text-xs text-muted-foreground">Source</span>
-      <TooltipProvider><Tooltip><TooltipTrigger asChild><span><Seg value="all" options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"]]} onChange={() => {}} disabled /></span></TooltipTrigger><TooltipContent>Coming soon — Sanketika</TooltipContent></Tooltip></TooltipProvider>
+      <Seg value={source} options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"], ["bulk", "Bulk"], ["self", "Self"]]} onChange={setSource} />
     </div>
     <div className="flex flex-wrap items-center gap-3">
       {chip("time", [["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["this_week", "This Week"], ["last_week", "Last Week"], ["this_month", "This Month"], ["last_month", "Last Month"]])}
@@ -195,7 +196,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
     </div>
 
     <div className="overflow-auto rounded-xl border bg-card">
-      {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} from={range.from} to={range.to} /> : <table className="w-full text-sm">
+      {level === "flat" ? <FlatRows instance={instance} coords={coords.filter(c => c.s.dots > 0)} filters={filters} from={scope.from} to={scope.to} source={scope.source} /> : <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-muted-foreground">
           <tr><th scope="col" className="px-3 py-2 text-left font-medium">Name</th><th scope="col" className={cn(th, "tabular-nums")}>Seekers</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 published profile">Live</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with only draft profiles">Draft</th><th scope="col" className={cn(th, "tabular-nums")}>Profile status</th><th scope="col" className={cn(th, "tabular-nums")} title="Seekers with ≥1 application">Applied</th><th scope="col" className={cn(th, "tabular-nums")}>Apply rate</th></tr>
         </thead>
@@ -204,16 +205,16 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
             <AggRow a={o} depth={0} open={open.has(o.id)} onToggle={() => toggle(o.id)} />
             {open.has(o.id) && o.coords.map(c => <Fragment key={c.id}>
               <AggRow a={c} depth={1} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={range.from} to={range.to} />}
+              {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={scope.from} to={scope.to} source={scope.source} />}
             </Fragment>)}
           </Fragment>)}
           {level === "coord" && coords.map(c => <Fragment key={c.id}>
             <AggRow a={c} depth={0} open={open.has(c.id)} onToggle={() => toggle(c.id)} />
-            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={range.from} to={range.to} />}
+            {open.has(c.id) && <SeekerRows instance={instance} coordId={c.id} filters={filters} from={scope.from} to={scope.to} source={scope.source} />}
           </Fragment>)}
         </tbody>
       </table>}
     </div>
-    <p className="text-xs text-muted-foreground">Aggregate rows show seeker counts from the district rollup; per-outcome splits appear on seeker rows. Source (voice/QR) data isn't available yet.</p>
+    <p className="text-xs text-muted-foreground">Aggregate rows show seeker counts from the district rollup; per-outcome splits appear on seeker rows.</p>
   </section>;
 }

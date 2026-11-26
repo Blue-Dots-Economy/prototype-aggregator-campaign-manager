@@ -4,13 +4,18 @@ import { mapLiveProfile, type ApplyStats, type LiveProfile, type Seeker } from "
 export type ScopedSeekerRow = {
   id: string; userId: string; joined: string; profileSignal: Seeker["profileSignal"]; profileCompletion: number;
   status: Seeker["status"]; applied: number; accepted: number; rejected: number; pending: number; servicesAccepted: number;
+  source: "Voice" | "QR" | "Bulk" | "Self" | "—";
 };
 export type ScopedSeekers = { rows: ScopedSeekerRow[]; capped: boolean };
 const CAP = 1000;
 const PAGE = 500;
 const chunks = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
+const sourceLabel = (value: string | null | undefined): ScopedSeekerRow["source"] =>
+  value === "voice" ? "Voice" : value === "link" ? "QR" : value === "bulk" || value === "jobstack_migration" ? "Bulk" : value === "self" ? "Self" : "—";
+const requestedSource = (value: string | null | undefined): ScopedSeekerRow["source"] | null =>
+  value === "voice" ? "Voice" : value === "qr" ? "QR" : value === "bulk" ? "Bulk" : value === "self" ? "Self" : null;
 
-export async function loadScopedSeekers(instance: string, coordinatorId: string, from?: string | null, to?: string | null): Promise<ScopedSeekers> {
+export async function loadScopedSeekers(instance: string, coordinatorId: string, from?: string | null, to?: string | null, source?: string | null): Promise<ScopedSeekers> {
   const db = blueDotsClient();
   const userIds: string[] = [];
   for (let last = ""; ;) {
@@ -25,6 +30,13 @@ export async function loadScopedSeekers(instance: string, coordinatorId: string,
     if (!rows.length || userIds.length > 20000) break;
     last = rows[rows.length - 1]!.id;
   }
+  const sources = new Map<string, string | null>();
+  for (const ids of chunks(userIds, 150)) {
+    const { data, error } = await db.from("bluedot_profile_aggregators").select("profile_id,onboarded_via").eq("instance", instance).in("user_id", ids);
+    if (error) throw new Error("Couldn't load seekers");
+    for (const row of (data ?? []) as { profile_id: string; onboarded_via: string | null }[]) sources.set(row.profile_id, row.onboarded_via);
+  }
+  const wantedSource = requestedSource(source);
   const profiles: LiveProfile[] = [];
   for (const ids of chunks(userIds, 150)) {
     for (let last = ""; profiles.length <= CAP;) {
@@ -34,7 +46,10 @@ export async function loadScopedSeekers(instance: string, coordinatorId: string,
       const { data, error } = await q;
       if (error) throw new Error("Couldn't load seekers");
       const rows = (data ?? []) as LiveProfile[];
-      profiles.push(...rows);
+      for (const profile of rows) {
+        if (wantedSource && sourceLabel(sources.get(profile.item_id)) !== wantedSource) continue;
+        profiles.push(profile);
+      }
       if (!rows.length) break;
       last = rows[rows.length - 1]!.item_id;
     }
@@ -73,7 +88,8 @@ export async function loadScopedSeekers(instance: string, coordinatorId: string,
     const apps = new Map<string, ApplyStats>(s ? [[`${p.instance}:${p.item_id}`, s]] : []);
     const m = mapLiveProfile(p, apps, now);
     return { id: m.id, userId: m.userId, joined: m.createdOn, profileSignal: m.profileSignal, profileCompletion: m.profileCompletion, status: m.status,
-      applied: s?.total ?? 0, accepted: s?.accepted ?? 0, rejected: s?.rejected ?? 0, pending: s?.pending ?? 0, servicesAccepted: s?.services ?? 0 };
+      applied: s?.total ?? 0, accepted: s?.accepted ?? 0, rejected: s?.rejected ?? 0, pending: s?.pending ?? 0, servicesAccepted: s?.services ?? 0,
+      source: sourceLabel(sources.get(p.item_id)) };
   });
   return { rows, capped };
 }

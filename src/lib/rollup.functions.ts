@@ -5,20 +5,21 @@ export type { DistrictRollup, RollupOrg, RollupCoordinator, RollupMember, Rollup
 export { statsFor } from "./rollup.model";
 
 export const fetchDistrictRollup = createServerFn({ method: "POST" })
-  .inputValidator((d: { instance: string; aggregatorId?: string | null; coordinatorId?: string | null; offset?: number; from?: string | null; to?: string | null }) => ({
+  .inputValidator((d: { instance: string; aggregatorId?: string | null; coordinatorId?: string | null; offset?: number; from?: string | null; to?: string | null; source?: string | null }) => ({
     instance: d.instance === "KA" ? "KA" : d.instance === "UP" ? "UP" : "",
     aggregatorId: typeof d.aggregatorId === "string" && d.aggregatorId.length <= 150 ? d.aggregatorId : null,
     coordinatorId: typeof d.coordinatorId === "string" && d.coordinatorId.length <= 150 ? d.coordinatorId : null,
     offset: Number.isSafeInteger(d.offset) && (d.offset ?? 0) >= 0 ? d.offset ?? 0 : 0,
     from: typeof d.from === "string" && d.from.length <= 40 && Number.isFinite(new Date(d.from).getTime()) ? d.from : null,
     to: typeof d.to === "string" && d.to.length <= 40 && Number.isFinite(new Date(d.to).getTime()) ? d.to : null,
+    source: ["voice", "qr", "bulk", "self"].includes(d.source ?? "") ? d.source ?? null : null,
   }))
   .handler(async ({ data }): Promise<DistrictRollup> => {
     if (!data.instance) return { available: false };
     const { blueDotsScope } = await import("./blue-dots-auth.server");
     const scoped = await blueDotsScope(data);
     const { loadDistrictRollup } = await import("./rollup.server");
-    return loadDistrictRollup(scoped.instance, scoped.aggregatorId, data.offset, scoped.coordinatorId, data.from, data.to);
+    return loadDistrictRollup(scoped.instance, scoped.aggregatorId, data.offset, scoped.coordinatorId, data.from, data.to, data.source);
   });
 
 export const fetchArmMembers = createServerFn({ method: "POST" })

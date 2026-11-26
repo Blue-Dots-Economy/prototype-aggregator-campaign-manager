@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { User, LoaderCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-export function useLiveRollup(instance: string, aggregatorId?: string, coordinatorId?: string, window: { from: string | null; to: string | null } = { from: null, to: null }) {
+export function useLiveRollup(instance: string, aggregatorId?: string, coordinatorId?: string, scope: { from: string | null; to: string | null; source: string | null } = { from: null, to: null, source: null }) {
   const fn = useServerFn(fetchDistrictRollup);
   const cache = useQueryClient();
   const refresh = useMutation({ mutationFn: async () => {
@@ -17,8 +17,8 @@ export function useLiveRollup(instance: string, aggregatorId?: string, coordinat
     await cache.invalidateQueries({ queryKey: ["blue-dots-members"] });
   } });
   const query = useInfiniteQuery({
-    queryKey: ["live-blue-dots", instance, aggregatorId ?? "", coordinatorId ?? "", window.from ?? "", window.to ?? ""], initialPageParam: 0,
-    queryFn: ({ pageParam }) => fn({ data: { instance, aggregatorId, coordinatorId, offset: pageParam, from: window.from, to: window.to } }),
+    queryKey: ["live-blue-dots", instance, aggregatorId ?? "", coordinatorId ?? "", scope.from ?? "", scope.to ?? "", scope.source ?? ""], initialPageParam: 0,
+    queryFn: ({ pageParam }) => fn({ data: { instance, aggregatorId, coordinatorId, offset: pageParam, from: scope.from, to: scope.to, source: scope.source } }),
     getNextPageParam: page => page.available ? page.nextOffset ?? undefined : undefined,
     staleTime: 5 * 60_000,
   });

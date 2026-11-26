@@ -2,9 +2,9 @@ import { blueDotsClient } from "./blue-dots-auth.server";
 import { rollupFromCounts, resolveAggregator, type ArmCounts, type DistrictRollup, type RollupMember } from "./rollup.model";
 export type { DistrictRollup, RollupOrg, RollupCoordinator, RollupMember, RollupStats, Lifecycle } from "./rollup.model";
 
-export async function loadDistrictRollup(instance: string, aggregatorId?: string | null, offset = 0, coordinatorId?: string | null, from?: string | null, to?: string | null): Promise<DistrictRollup> {
+export async function loadDistrictRollup(instance: string, aggregatorId?: string | null, offset = 0, coordinatorId?: string | null, from?: string | null, to?: string | null, source?: string | null): Promise<DistrictRollup> {
   try {
-    const { data, error } = await blueDotsClient().rpc("get_bluedot_rollup", { p_instance: instance, p_from: from ?? null, p_to: to ?? null });
+    const { data, error } = await blueDotsClient().rpc("get_bluedot_rollup", { p_instance: instance, p_from: from ?? null, p_to: to ?? null, p_source: source ?? null });
     if (error) throw new Error(error.message);
     const rows = (data ?? []) as ArmCounts[];
     const updatedAt = rows[0]?.updated_at ?? null;
