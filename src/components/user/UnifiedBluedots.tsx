@@ -1,8 +1,9 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveRollup, Freshness, LiveState } from "./live-rollup";
@@ -32,10 +33,21 @@ type Level = "org" | "coord" | "flat";
 type Agg = { id: string; name: string; s: RollupStats };
 type Filters = { time: "all" | "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"; signal: "all" | ScopedSeekerRow["profileSignal"]; status: "all" | Status };
 
-function Seg<T extends string>({ value, options, onChange, disabled }: { value: T; options: [T, string][]; onChange: (v: T) => void; disabled?: boolean }) {
-  return <div className={cn("inline-flex rounded-lg border bg-muted/40 p-0.5", disabled && "opacity-50")}>{options.map(([v, l]) => (
-    <button key={v} type="button" disabled={disabled} onClick={() => onChange(v)} className={cn("rounded-md px-3 py-1 text-xs font-medium transition-colors", value === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground", disabled && "cursor-not-allowed")}>{l}</button>
-  ))}</div>;
+function FilterMenu<T extends string>({ label, value, options, onValueChange, active = value !== "all" }: { label: string; value: T; options: [T, string][]; onValueChange: (v: T) => void; active?: boolean }) {
+  const selected = options.find(([v]) => v === value)?.[1] ?? value;
+  return <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="outline" className={cn("inline-flex h-auto items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-[13px] shadow-none", active && "border-primary/30 bg-primary/10 text-foreground")}>
+        <span className={cn("text-xs text-muted-foreground", active && "text-primary/80")}>{label}</span>
+        <span>{selected}</span><ChevronDown className="h-3 w-3 opacity-60" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start">
+      <DropdownMenuRadioGroup value={value} onValueChange={v => { const option = options.find(([key]) => key === v); if (option) onValueChange(option[0]); }}>
+        {options.map(([v, text]) => <DropdownMenuRadioItem key={v} value={v}>{text}</DropdownMenuRadioItem>)}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuContent>
+  </DropdownMenu>;
 }
 const td = "px-3 py-2.5 text-right tabular-nums";
 function AggCells({ s }: { s: RollupStats }) {
@@ -165,7 +177,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   if (live.loading && !orgs.length) return <LiveState loading retry={live.retry} />;
   if (live.isError || !live.available) return <LiveState loading={false} retry={live.retry} />;
 
-  const chip = <K extends keyof Filters>(k: K, opts: [Filters[K], string][]) => <Seg value={filters[k]} options={opts} onChange={v => setFilters(f => ({ ...f, [k]: v }))} />;
+  const activeCount = Number(filters.time !== "all") + Number(source !== "all") + Number(filters.signal !== "all") + Number(filters.status !== "all");
   const th = "px-3 py-2 font-medium text-right";
   return <section className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -181,18 +193,18 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       </div>)}
     </div>
 
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
+      <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />Scope</span>
       <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium"><MapPin className="h-3.5 w-3.5" />{district}</span>
-      <span className="text-xs text-muted-foreground">Start level</span>
-      <Seg value={level} options={[["org", "Organisation"], ["coord", "Coordinator"], ["flat", "Seekers (flat)"]]} onChange={setLevel} />
-      <span className="text-xs text-muted-foreground">Source</span>
-      <Seg value={source} options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"], ["bulk", "Bulk"], ["self", "Self"]]} onChange={setSource} />
-    </div>
-    <div className="flex flex-wrap items-center gap-3">
-      {chip("time", [["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["this_week", "This Week"], ["last_week", "Last Week"], ["this_month", "This Month"], ["last_month", "Last Month"]])}
-      {chip("signal", [["all", "All profiles"], ["Strong", "Strong"], ["Moderate", "Moderate"], ["Weak", "Weak"]])}
-      {chip("status", [["all", "All status"], ["New", "New"], ["Active", "Active"], ["At Risk", "At Risk"], ["Inactive", "Inactive"]])}
-      <span className="text-xs text-muted-foreground">Time filter applies across the whole view; signal &amp; status refine seeker rows.</span>
+      <FilterMenu label="Level" value={level} options={[["org", "Organisation"], ["coord", "Coordinator"], ["flat", "Seekers (flat)"]]} onValueChange={setLevel} active={false} />
+      <FilterMenu label="Source" value={source} options={[["all", "All"], ["voice", "Voice"], ["qr", "QR"], ["bulk", "Bulk"], ["self", "Self"]]} onValueChange={setSource} />
+      <FilterMenu label="Period" value={filters.time} options={[["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["this_week", "This week"], ["last_week", "Last week"], ["this_month", "This month"], ["last_month", "Last month"]]} onValueChange={v => setFilters(f => ({ ...f, time: v }))} />
+      <span className="mx-1 h-5 w-px bg-border" />
+      <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-slate-400/60" />Refine</span>
+      <FilterMenu label="Signal" value={filters.signal} options={[["all", "All"], ["Strong", "Strong"], ["Moderate", "Moderate"], ["Weak", "Weak"]]} onValueChange={v => setFilters(f => ({ ...f, signal: v }))} />
+      <FilterMenu label="Status" value={filters.status} options={[["all", "All"], ["New", "New"], ["Active", "Active"], ["At Risk", "At Risk"], ["Inactive", "Inactive"]]} onValueChange={v => setFilters(f => ({ ...f, status: v }))} />
+      <span className="flex-1" />
+      {activeCount > 0 && <Button variant="ghost" className="inline-flex h-auto items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1.5 text-xs text-muted-foreground hover:border-border hover:bg-transparent hover:text-foreground" onClick={() => { setFilters({ time: "all", signal: "all", status: "all" }); setSource("all"); }}><X className="h-3 w-3" />{activeCount} active · Clear</Button>}
     </div>
 
     <div className="overflow-auto rounded-xl border bg-card">
