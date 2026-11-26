@@ -1,6 +1,6 @@
 export type Lifecycle = "New" | "Active" | "At Risk" | "Inactive";
 export interface RollupMember { id: string; kind: "seeker" | "provider"; joined: string; applications: number; livePostings: number; lifecycle: Lifecycle }
-export interface RollupStats { dots: number; new7d: number; active: number; atRisk: number; inactive: number; applied: number; strong: number; moderate: number; weak: number }
+export interface RollupStats { dots: number; new7d: number; active: number; atRisk: number; inactive: number; applied: number; strong: number; moderate: number; weak: number; live: number; draft: number }
 export interface RollupCoordinator { id: string; name: string; type: string; typeLabel: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[] }
 export interface RollupOrg { id: string; name: string; seekers: RollupStats; providers: RollupStats; livePostings: number; members: RollupMember[]; coordinators: RollupCoordinator[] }
 export type DistrictRollup = { available: true; instance: string; orgs: RollupOrg[]; nextOffset: number | null; updatedAt?: string | null } | { available: false };
@@ -8,14 +8,14 @@ export interface AggregatorRow { org_id: string; org_name: string | null; coordi
 export interface UserRow { id: string; created_at: string; domains: string[] | null; onboarded_by_org_id: string | null }
 export interface ApplyRow { action_id: string; source_item_owner: string; created_at: string }
 export interface PostingRow { item_id: string; created_by: string }
-export const emptyStats = (): RollupStats => ({ dots: 0, new7d: 0, active: 0, atRisk: 0, inactive: 0, applied: 0, strong: 0, moderate: 0, weak: 0 });
+export const emptyStats = (): RollupStats => ({ dots: 0, new7d: 0, active: 0, atRisk: 0, inactive: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 });
 export type ParticipantView = "all" | "seeker" | "provider";
 /** The single stats selector for every participant-view surface. */
 export function statsFor(o: Pick<RollupOrg, "seekers" | "providers">, view: ParticipantView): RollupStats {
   if (view === "seeker") return o.seekers;
   if (view === "provider") return o.providers;
   const a = o.seekers, b = o.providers;
-  return { dots: a.dots + b.dots, new7d: a.new7d + b.new7d, active: a.active + b.active, atRisk: a.atRisk + b.atRisk, inactive: a.inactive + b.inactive, applied: a.applied + b.applied, strong: a.strong + b.strong, moderate: a.moderate + b.moderate, weak: a.weak + b.weak };
+  return { dots: a.dots + b.dots, new7d: a.new7d + b.new7d, active: a.active + b.active, atRisk: a.atRisk + b.atRisk, inactive: a.inactive + b.inactive, applied: a.applied + b.applied, strong: a.strong + b.strong, moderate: a.moderate + b.moderate, weak: a.weak + b.weak, live: a.live + b.live, draft: a.draft + b.draft };
 }
 const MEMBERS_PER_KIND = 150;
 const DAY = 86400000;
@@ -107,6 +107,7 @@ export function resolveAggregator(orgs: RollupOrg[], id: string): RollupOrg[] {
 export interface ArmCounts extends Omit<AggregatorRow, "test_flag"> {
   s_total: number; s_new: number; s_active: number; s_at_risk: number; s_inactive: number; s_applied: number;
   s_strong: number; s_moderate: number; s_weak: number;
+  s_live: number; s_draft: number;
   p_total: number; p_new: number; p_active: number; p_inactive: number; p_live_postings: number; p_applied?: number;
   updated_at?: string | null;
 }
@@ -119,8 +120,8 @@ export function rollupFromCounts(rows: ArmCounts[]): RollupOrg[] {
       org = { id: r.org_id, name: r.org_name?.trim() || r.org_id, seekers: emptyStats(), providers: emptyStats(), livePostings: 0, members: [], coordinators: [] };
       orgs.set(r.org_id, org);
     }
-    const seekers = { dots: Number(r.s_total), new7d: Number(r.s_new), active: Number(r.s_active), atRisk: Number(r.s_at_risk), inactive: Number(r.s_inactive), applied: Number(r.s_applied), strong: Number(r.s_strong), moderate: Number(r.s_moderate), weak: Number(r.s_weak) };
-    const providers = { dots: Number(r.p_total), new7d: Number(r.p_new), active: Number(r.p_active), atRisk: 0, inactive: Number(r.p_inactive), applied: 0, strong: 0, moderate: 0, weak: 0 };
+    const seekers = { dots: Number(r.s_total), new7d: Number(r.s_new), active: Number(r.s_active), atRisk: Number(r.s_at_risk), inactive: Number(r.s_inactive), applied: Number(r.s_applied), strong: Number(r.s_strong), moderate: Number(r.s_moderate), weak: Number(r.s_weak), live: Number(r.s_live), draft: Number(r.s_draft) };
+    const providers = { dots: Number(r.p_total), new7d: Number(r.p_new), active: Number(r.p_active), atRisk: 0, inactive: Number(r.p_inactive), applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 };
     // Provider applied counts participants with live postings, including New participants.
     providers.applied = Number(r.p_applied ?? r.p_active);
     const type = r.coordinator_type ?? "";
