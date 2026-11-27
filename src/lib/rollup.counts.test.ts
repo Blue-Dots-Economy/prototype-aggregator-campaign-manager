@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { rollupFromCounts, resolveAggregator, statsFor, type ArmCounts } from "./rollup.model";
 
-const arm = (id: string, type: string, counts: Partial<ArmCounts> = {}): ArmCounts => ({ org_id: "jfc", org_name: "Joint Facilitation Centre Ghaziabad - JFC", coordinator_org_id: id, coordinator_org_name: "Joint Facilitation Centre Ghaziabad - JFC", coordinator_type: type, s_total: 0, s_new: 0, s_active: 0, s_at_risk: 0, s_inactive: 0, s_applied: 0, s_strong: 0, s_moderate: 0, s_weak: 0, s_live: 0, s_draft: 0, p_total: 0, p_new: 0, p_active: 0, p_inactive: 0, p_live_postings: 0, ...counts });
+const arm = (id: string, type: string, counts: Partial<ArmCounts> = {}): ArmCounts => ({ org_id: "jfc", org_name: "Joint Facilitation Centre Ghaziabad - JFC", coordinator_org_id: id, coordinator_org_name: "Joint Facilitation Centre Ghaziabad - JFC", coordinator_type: type, s_total: 0, s_new: 0, s_active: 0, s_at_risk: 0, s_inactive: 0, s_applied: 0, s_strong: 0, s_moderate: 0, s_weak: 0, s_live: 0, s_draft: 0, s_comp_sum: 0, s_comp_users: 0, s_below60: 0, p_total: 0, p_new: 0, p_active: 0, p_inactive: 0, p_live_postings: 0, ...counts });
 const rows = [arm("seeker-arm", "seeker", { s_total: 1381, s_new: 3, s_active: 2, s_at_risk: 83, s_inactive: 1293, s_applied: 85 }), arm("provider-arm", "provider", { p_total: 27, p_inactive: 27 }), arm("service-arm", "service_provider")];
 describe("count-only mirror hierarchy", () => {
   it("preserves JFC All 1408", () => { expect(statsFor(rollupFromCounts(rows)[0], "all").dots).toBe(1408); });

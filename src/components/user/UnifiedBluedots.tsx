@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X } from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X, Gauge, FileWarning } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -198,7 +198,9 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   useEffect(() => { if (liveOrgs.length) lastOrgs.current = liveOrgs; }, [liveOrgs]);
   const orgs = liveOrgs.length ? liveOrgs : lastOrgs.current;
   const coords = useMemo(() => orgs.flatMap(o => o.coords), [orgs]);
-  const totals = useMemo(() => seekerOrgs.reduce((t, s) => ({ new7d: t.new7d + s.new7d, active: t.active + s.active, atRisk: t.atRisk + s.atRisk, inactive: t.inactive + s.inactive, dots: t.dots + s.dots, applied: t.applied + s.applied, strong: t.strong + s.strong, moderate: t.moderate + s.moderate, weak: t.weak + s.weak, live: t.live + s.live, draft: t.draft + s.draft }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0 } as RollupStats), [seekerOrgs]);
+  const totals = useMemo(() => seekerOrgs.reduce((t, s) => ({ new7d: t.new7d + s.new7d, active: t.active + s.active, atRisk: t.atRisk + s.atRisk, inactive: t.inactive + s.inactive, dots: t.dots + s.dots, applied: t.applied + s.applied, strong: t.strong + s.strong, moderate: t.moderate + s.moderate, weak: t.weak + s.weak, live: t.live + s.live, draft: t.draft + s.draft, compSum: t.compSum + s.compSum, compUsers: t.compUsers + s.compUsers, below60: t.below60 + s.below60 }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0, compSum: 0, compUsers: 0, below60: 0 } as RollupStats), [seekerOrgs]);
+  const avgComp = totals.compUsers ? Math.round(totals.compSum / totals.compUsers) : null;
+  const belowPct = totals.compUsers ? Math.round(totals.below60 / totals.compUsers * 100) : null;
 
   if (live.loading && !orgs.length) return <LiveState loading retry={live.retry} />;
   if (live.isError || !live.available) return <LiveState loading={false} retry={live.retry} />;
@@ -211,12 +213,22 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       <div className="flex items-center gap-3"><Freshness updatedAt={live.updatedAt} error={live.refreshError} /><Button variant="outline" size="sm" onClick={live.refresh} disabled={live.refreshing}><RefreshCw className={cn("mr-2 h-4 w-4", live.refreshing && "animate-spin")} />Refresh</Button></div>
     </div>
 
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
       {LIFE.map(l => <div key={l.status} className="rounded-xl border bg-card p-5">
         <div className="flex items-center gap-2 text-muted-foreground"><l.Icon className={cn("h-4 w-4", l.c)} /><span className="text-sm font-medium">{l.status}</span></div>
         <div className={cn("mt-3 text-3xl font-bold tabular-nums", l.c)}>{fmt(totals[l.key])}</div>
         <div className="mt-1 text-xs text-muted-foreground">{l.desc}</div>
       </div>)}
+      <div className="rounded-xl border bg-card p-5">
+        <div className="flex items-center gap-2 text-muted-foreground"><Gauge className="h-4 w-4 text-cyan-600 dark:text-cyan-400" /><span className="text-sm font-medium">Average completeness</span></div>
+        <div className="mt-3 text-3xl font-bold tabular-nums text-cyan-600 dark:text-cyan-400">{avgComp === null ? "—" : `${avgComp}%`}</div>
+        <div className="mt-1 text-xs text-muted-foreground">Participant-weighted</div>
+      </div>
+      <div className="rounded-xl border bg-card p-5">
+        <div className="flex items-center gap-2 text-muted-foreground"><FileWarning className="h-4 w-4 text-violet-600 dark:text-violet-400" /><span className="text-sm font-medium">Below 60%</span></div>
+        <div className="mt-3 text-3xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{fmt(totals.below60)}</div>
+        <div className="mt-1 text-xs text-muted-foreground">{belowPct === null ? "—" : `${belowPct}% of ${fmt(totals.compUsers)} participants`}</div>
+      </div>
     </div>
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
