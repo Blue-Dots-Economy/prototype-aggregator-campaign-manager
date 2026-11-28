@@ -148,17 +148,17 @@ const FIELDS: { key: "role" | "location" | "experience" | "age" | "education"; l
   { key: "role", label: "Job role" }, { key: "location", label: "Location" },
   { key: "experience", label: "Experience" }, { key: "age", label: "Age" }, { key: "education", label: "Education" },
 ];
-function FieldCompletionPanel({ fc }: { fc: FieldCompletion }) {
+function FieldCompletionPanel({ fc, full }: { fc: FieldCompletion; full?: boolean }) {
   const items = FIELDS.map(f => ({ ...f, pct: fc.total ? Math.round((fc[f.key] as number) / fc.total * 100) : 0 })).sort((a, b) => a.pct - b.pct);
   const bar = (p: number) => p < 40 ? "bg-rose-500" : p < 75 ? "bg-amber-500" : "bg-emerald-500";
   const txt = (p: number) => p < 40 ? "text-rose-600 dark:text-rose-400" : p < 75 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
-  return <div className="border-t bg-muted/10 px-4 py-3">
-    <div className="mb-2.5 flex items-center gap-2"><span className="text-xs font-semibold text-foreground">Field completion</span><span className="text-[11px] text-muted-foreground">what to chase · {fmt(fc.total)} profiles</span></div>
-    <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+  return <div className={cn("px-4 py-3", full && "md:col-span-2")}>
+    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Field completion</span><span className="text-[11px] text-muted-foreground/70">what to chase · {fmt(fc.total)}</span></div>
+    <div className="space-y-1.5">
       {items.map(f => <div key={f.key} className="flex items-center gap-2.5">
-        <span className="w-20 shrink-0 text-xs text-muted-foreground">{f.label}</span>
-        <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", bar(f.pct))} style={{ width: `${f.pct}%` }} /></span>
-        <span className={cn("w-8 shrink-0 text-right text-xs font-medium tabular-nums", txt(f.pct))}>{f.pct}%</span>
+        <span className="w-16 shrink-0 text-[11px] text-muted-foreground">{f.label}</span>
+        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", bar(f.pct))} style={{ width: `${f.pct}%` }} /></span>
+        <span className={cn("w-7 shrink-0 text-right text-[11px] font-semibold tabular-nums", txt(f.pct))}>{f.pct}%</span>
       </div>)}
     </div>
   </div>;
@@ -172,30 +172,27 @@ async function downloadQr(url: string, title: string) {
     document.body.appendChild(a); a.click(); a.remove();
   } catch { /* ignore */ }
 }
-function QrPanel({ instance, coordId }: { instance: string; coordId: string }) {
-  const fn = useServerFn(fetchCoordinatorQrs);
-  const q = useQuery({ queryKey: ["coord-qrs", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
+function QrPanel({ qrs, full }: { qrs: QrRow[]; full?: boolean }) {
   const [showAll, setShowAll] = useState(false);
-  if (!q.data || q.data.length === 0) return null;
-  const active = q.data.filter(r => r.brought > 0);
-  const rest = q.data.filter(r => r.brought === 0);
-  const shown: QrRow[] = showAll || active.length === 0 ? q.data : active;
-  return <div className="border-t bg-muted/10 px-4 py-3">
-    <div className="mb-2.5 flex items-center gap-2"><span className="text-xs font-semibold text-foreground">QR codes</span><span className="text-[11px] text-muted-foreground">which brought what</span></div>
-    <ul className="space-y-1.5">
-      {shown.map(r => <li key={r.linkId} className="flex items-center gap-3">
+  const active = qrs.filter(r => r.brought > 0);
+  const rest = qrs.filter(r => r.brought === 0);
+  const shown: QrRow[] = showAll || active.length === 0 ? qrs : active;
+  return <div className={cn("px-4 py-3", full && "md:col-span-2")}>
+    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">QR codes</span><span className="text-[11px] text-muted-foreground/70">which brought what</span></div>
+    <ul className="space-y-1">
+      {shown.map(r => <li key={r.linkId} className="flex items-center gap-2.5 rounded-lg border bg-muted/20 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-medium">{r.title}</div>
-          <div className="text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-xs font-semibold tabular-nums">{fmt(r.brought)}</div>
-          <div className={cn("text-[11px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `+${fmt(r.brought30d)} · 30d` : "no recent"}</div>
+        <div className="shrink-0 text-right leading-tight">
+          <div className="text-xs font-bold tabular-nums">{fmt(r.brought)}</div>
+          <div className={cn("text-[10px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `▲ ${fmt(r.brought30d)}` : "—"}</div>
         </div>
-        <Button variant="outline" size="sm" disabled={!r.url} className="h-7 shrink-0 gap-1.5 px-2 text-xs" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3 w-3" />QR</Button>
+        <Button variant="outline" size="icon" disabled={!r.url} title="Download QR" className="h-7 w-7 shrink-0" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3.5 w-3.5" /></Button>
       </li>)}
     </ul>
-    {rest.length > 0 && active.length > 0 && !showAll && <button type="button" onClick={() => setShowAll(true)} className="mt-2 text-[11px] text-muted-foreground hover:text-foreground">Show {rest.length} more with no signups yet</button>}
+    {rest.length > 0 && active.length > 0 && !showAll && <button type="button" onClick={() => setShowAll(true)} className="mt-1.5 text-[11px] text-muted-foreground hover:text-foreground">Show {rest.length} more</button>}
   </div>;
 }
 function SeekerRows({ instance, coordId, filters, from, to, source }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null; source: string | null }) {
@@ -203,12 +200,21 @@ function SeekerRows({ instance, coordId, filters, from, to, source }: { instance
   const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
   const fcFn = useServerFn(fetchFieldCompletion);
   const fcq = useQuery({ queryKey: ["field-completion", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fcFn({ data: { instance, coordinatorId: coordId, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
+  const qrFn = useServerFn(fetchCoordinatorQrs);
+  const qrq = useQuery({ queryKey: ["coord-qrs", instance, coordId], queryFn: () => qrFn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
   if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const rows = q.data.rows.filter(r => passes(r, filters));
   return <tr className="border-t"><td colSpan={7} className="p-0">
-    {fcq.data && fcq.data.total > 0 && <FieldCompletionPanel fc={fcq.data} />}
-    <QrPanel instance={instance} coordId={coordId} />
+    {(() => {
+      const hasFc = !!fcq.data && fcq.data.total > 0;
+      const hasQr = !!qrq.data && qrq.data.length > 0;
+      if (!hasFc && !hasQr) return null;
+      return <div className="grid border-t divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+        {hasFc && <FieldCompletionPanel fc={fcq.data!} full={!hasQr} />}
+        {hasQr && <QrPanel qrs={qrq.data!} full={!hasFc} />}
+      </div>;
+    })()}
     <SeekerTable rows={rows}>
       {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
       {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
