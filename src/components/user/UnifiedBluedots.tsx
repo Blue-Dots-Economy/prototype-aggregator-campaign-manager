@@ -7,10 +7,9 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useLiveRollup, useLiveMembers, Freshness, LiveState } from "./live-rollup";
-import { fetchScopedSeekers, fetchFieldCompletion, fetchCoordinatorQrs, fetchProviderFieldCompletion, type ScopedSeekerRow, type FieldCompletion, type QrRow, type ProviderFieldCompletion } from "@/lib/scoped-seekers.functions";
+import { useLiveRollup, Freshness, LiveState } from "./live-rollup";
+import { fetchScopedSeekers, fetchFieldCompletion, fetchCoordinatorQrs, fetchProviderFieldCompletion, fetchScopedProviders, type ScopedSeekerRow, type FieldCompletion, type QrRow, type ProviderFieldCompletion, type ProviderRow, type ScopedProviders } from "@/lib/scoped-seekers.functions";
 import type { RollupStats } from "@/lib/rollup.functions";
-import type { RollupMember } from "@/lib/rollup.functions";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 type Status = ScopedSeekerRow["status"];
@@ -47,13 +46,15 @@ function ProviderCells({ s, lp }: { s: RollupStats; lp: number }) {
   </>;
 }
 function ProviderRows({ instance, coordId }: { instance: string; coordId: string }) {
-  const q = useLiveMembers(instance, undefined, coordId, "provider", true);
+  const fn = useServerFn(fetchScopedProviders);
+  const q = useQuery({ queryKey: ["scoped-providers", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
   const pfFn = useServerFn(fetchProviderFieldCompletion);
   const pfq = useQuery({ queryKey: ["provider-fields", instance, coordId], queryFn: () => pfFn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
   const qrFn = useServerFn(fetchCoordinatorQrs);
   const qrq = useQuery({ queryKey: ["coord-qrs", instance, coordId], queryFn: () => qrFn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading providers…</td></tr>;
-  const members = q.data ?? [];
+  if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load providers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
+  const rows = q.data.rows;
   const hasPf = !!pfq.data && pfq.data.total > 0;
   const hasQr = !!qrq.data && qrq.data.length > 0;
   return <tr className="border-t"><td colSpan={6} className="p-0">
@@ -61,7 +62,10 @@ function ProviderRows({ instance, coordId }: { instance: string; coordId: string
       {hasPf && <ProviderFieldPanel pf={pfq.data!} full={!hasQr} />}
       {hasQr && <QrPanel qrs={qrq.data!} full={!hasPf} />}
     </div>}
-    <ProviderTable members={members} />
+    <ProviderTable rows={rows}>
+      {!rows.length && <tr className="border-t"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">No providers found.</td></tr>}
+      {q.data.capped && <tr className="border-t"><td colSpan={7} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 providers.</td></tr>}
+    </ProviderTable>
   </td></tr>;
 }
 type Filters = { time: "all" | "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"; signal: "all" | ScopedSeekerRow["profileSignal"]; status: "all" | Status };
@@ -189,33 +193,27 @@ function ProviderFieldPanel({ pf, full }: { pf: ProviderFieldCompletion; full?: 
   const items = PFIELDS.map(f => ({ label: f.label, pct: pf.total ? Math.round((pf[f.key] as number) / pf.total * 100) : 0 }));
   return <FieldBars caption={`postings to complete · ${fmt(pf.total)}`} items={items} full={full} />;
 }
-const LIFECOLOR: Record<string, string> = {
-  New: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  Active: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  "At Risk": "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  Inactive: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-};
-function ProviderTable({ members }: { members: RollupMember[] }) {
-  const joined = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); };
-  const live = members.reduce((n, m) => n + m.livePostings, 0);
-  const apps = members.reduce((n, m) => n + m.applications, 0);
+function ProviderRow({ r }: { r: ProviderRow }) {
+  return <tr className="border-t hover:bg-muted/30">
+    <td className="px-3 py-2.5"><span className="font-mono text-xs break-all text-muted-foreground">{r.id}</span></td>
+    <td className="px-3 py-2.5"><span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", SIGNAL[r.signal])}>{r.signal}</span></td>
+    <td className={td}>{fmt(r.postings)}</td>
+    <td className={cn(td, r.live ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground")}>{fmt(r.live)}</td>
+    <td className={cn(td, r.applications ? "" : "text-muted-foreground")}>{fmt(r.applications)}</td>
+    <td className={cn("px-3 py-2.5", r.source === "—" && "text-muted-foreground")}>{r.source}</td>
+    <td className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">{r.completeness}% complete</td>
+  </tr>;
+}
+function ProviderTable({ rows, children }: { rows: ProviderRow[]; children?: ReactNode }) {
+  const subtotal = rows.reduce((s, r) => ({ postings: s.postings + r.postings, live: s.live + r.live, apps: s.apps + r.applications }), { postings: 0, live: 0, apps: 0 });
   return <div className="bg-muted/20">
-    <p className="px-3 py-3 text-xs text-muted-foreground">{fmt(members.length)} providers · {fmt(live)} live postings · {fmt(apps)} applications</p>
+    <p className="px-3 py-3 text-xs text-muted-foreground">{fmt(rows.length)} providers · {fmt(subtotal.postings)} postings · {fmt(subtotal.live)} live · {fmt(subtotal.apps)} applications</p>
     <div className="overflow-x-auto">
-      <table className="w-full text-sm" aria-label="Providers">
+      <table className="w-full text-sm" aria-label="Provider postings">
         <thead className="border-t bg-muted/50 text-xs text-muted-foreground"><tr>
-          {["Provider", "Joined", "Apps", "Live postings", "Status"].map((h, i) => <th key={h} scope="col" className={cn("px-3 py-2 font-medium whitespace-nowrap", i >= 2 && i <= 3 ? "text-right" : "text-left")}>{h}</th>)}
+          {["Provider", "Signal", "Postings", "Live", "Applications", "Source", "Completeness"].map((h, i) => <th key={h} scope="col" className={cn("px-3 py-2 font-medium whitespace-nowrap", i >= 2 && i <= 4 ? "text-right" : "text-left")}>{h}</th>)}
         </tr></thead>
-        <tbody>
-          {members.map(m => <tr key={m.id} className="border-t hover:bg-muted/30">
-            <td className="px-3 py-2.5"><span className="font-mono text-xs break-all text-muted-foreground">{m.id}</span></td>
-            <td className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">{joined(m.joined)}</td>
-            <td className={cn(td, m.applications ? "" : "text-muted-foreground")}>{fmt(m.applications)}</td>
-            <td className={cn(td, m.livePostings ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground")}>{fmt(m.livePostings)}</td>
-            <td className="px-3 py-2.5"><span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", LIFECOLOR[m.lifecycle] ?? "")}>{m.lifecycle}</span></td>
-          </tr>)}
-          {!members.length && <tr className="border-t"><td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">No providers found.</td></tr>}
-        </tbody>
+        <tbody>{rows.map(r => <ProviderRow key={r.id} r={r} />)}{children}</tbody>
       </table>
     </div>
   </div>;

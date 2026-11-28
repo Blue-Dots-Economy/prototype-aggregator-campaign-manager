@@ -62,3 +62,26 @@ export async function loadProviderFieldCompletion(instance: string, coordinatorI
   const r = (Array.isArray(data) ? data[0] : data) as { total: number; role_filled: number; pay_filled: number; positions_filled: number; experience_filled: number; education_filled: number } | undefined;
   return { total: Number(r?.total ?? 0), role: Number(r?.role_filled ?? 0), pay: Number(r?.pay_filled ?? 0), positions: Number(r?.positions_filled ?? 0), experience: Number(r?.experience_filled ?? 0), education: Number(r?.education_filled ?? 0) };
 }
+
+export type ProviderRow = {
+  id: string; joined: string; signal: "Strong" | "Moderate" | "Weak"; completeness: number;
+  status: "New" | "Active" | "Inactive"; postings: number; live: number; applications: number;
+  source: "Voice" | "QR" | "Bulk" | "Self" | "—";
+};
+export type ScopedProviders = { rows: ProviderRow[]; capped: boolean };
+const PROVIDER_CAP = 1000;
+
+export async function loadScopedProviders(instance: string, coordinatorId: string, from?: string | null, to?: string | null): Promise<ScopedProviders> {
+  const db = blueDotsClient();
+  const { data, error } = await db.rpc("get_bluedot_providers", {
+    p_instance: instance, p_coordinator: coordinatorId, p_from: from ?? null, p_to: to ?? null, p_limit: PROVIDER_CAP,
+  });
+  if (error) throw new Error("Couldn't load providers");
+  const all = (data ?? []) as Array<{ item_id: string; joined: string | null; provider_signal: ProviderRow["signal"]; completeness: number; status: ProviderRow["status"]; postings: number; live: number; applications: number; source: ProviderRow["source"] }>;
+  const capped = all.length > PROVIDER_CAP;
+  const rows: ProviderRow[] = all.slice(0, PROVIDER_CAP).map(r => ({
+    id: r.item_id, joined: r.joined ?? "", signal: r.provider_signal, completeness: r.completeness,
+    status: r.status, postings: r.postings, live: r.live, applications: r.applications, source: r.source,
+  }));
+  return { rows, capped };
+}
