@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useLiveRollup, Freshness, LiveState } from "./live-rollup";
 import { fetchScopedSeekers, fetchFieldCompletion, fetchCoordinatorQrs, fetchProviderFieldCompletion, fetchScopedProviders, type ScopedSeekerRow, type FieldCompletion, type QrRow, type ProviderFieldCompletion, type ProviderRow, type ScopedProviders } from "@/lib/scoped-seekers.functions";
@@ -227,27 +228,99 @@ async function downloadQr(url: string, title: string) {
     document.body.appendChild(a); a.click(); a.remove();
   } catch { /* ignore */ }
 }
+function qrDate(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+function FunnelStage({ n, label, sub, tone }: { n: number; label: string; sub: string; tone?: string }) {
+  return <div className="flex-1 rounded-xl border bg-muted/20 px-3 py-2.5">
+    <div className={cn("text-xl font-bold leading-none tabular-nums", tone)}>{fmt(n)}</div>
+    <div className="mt-1 text-[11px] text-muted-foreground">{label}</div>
+    <div className="text-[10px] text-muted-foreground/70">{sub}</div>
+  </div>;
+}
+function QrDetailDialog({ qr, onClose }: { qr: QrRow | null; onClose: () => void }) {
+  const [img, setImg] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (qr?.url) QRCode.toDataURL(qr.url, { width: 320, margin: 2, errorCorrectionLevel: "M" }).then(d => { if (alive) setImg(d); }).catch(() => {});
+    else setImg(null);
+    return () => { alive = false; };
+  }, [qr?.url]);
+  const pct = (n: number) => qr && qr.brought ? Math.round(n / qr.brought * 100) : 0;
+  return <Dialog open={!!qr} onOpenChange={o => { if (!o) onClose(); }}>
+    <DialogContent className="max-w-2xl">
+      {qr && <>
+        <DialogHeader>
+          <DialogTitle className="pr-6 text-base leading-snug">{qr.title}</DialogTitle>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{[qr.location, qr.eventDate ? `Event ${qrDate(qr.eventDate)}` : null].filter(Boolean).join(" · ") || "—"}</span>
+            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase", qr.status === "live" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400")}>{qr.status}</span>
+          </div>
+        </DialogHeader>
+        <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="rounded-xl bg-white p-3">{img ? <img src={img} alt="QR code" className="h-[150px] w-[150px]" /> : <div className="h-[150px] w-[150px] animate-pulse rounded bg-muted" />}</div>
+            <Button variant="outline" size="sm" disabled={!qr.url} className="w-full" onClick={() => downloadQr(qr.url, qr.title)}><Download className="mr-2 h-3.5 w-3.5" />Download PNG</Button>
+            <p className="break-all text-center text-[10px] text-muted-foreground">{qr.url || "—"}</p>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-stretch gap-2">
+              <FunnelStage n={qr.brought} label="Brought" sub="via this QR" />
+              <span className="self-center text-muted-foreground">→</span>
+              <FunnelStage n={qr.liveProfiles} label="Live profile" sub={`${pct(qr.liveProfiles)}% of brought`} tone="text-emerald-600 dark:text-emerald-400" />
+              <span className="self-center text-muted-foreground">→</span>
+              <FunnelStage n={qr.applied} label="Applied" sub={`${pct(qr.applied)}% of brought`} tone="text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="rounded-xl border bg-muted/20 px-3 py-2.5">
+                <div className="text-[11px] text-muted-foreground">Avg completeness</div>
+                <div className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{qr.avgCompleteness === null ? "—" : `${qr.avgCompleteness}%`}</div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-amber-500" style={{ width: `${qr.avgCompleteness ?? 0}%` }} /></div>
+              </div>
+              <div className="rounded-xl border bg-muted/20 px-3 py-2.5">
+                <div className="text-[11px] text-muted-foreground">Who it brought</div>
+                <div className="text-sm font-semibold tabular-nums">{fmt(qr.seekers)} seekers · {fmt(qr.providers)} providers</div>
+                <div className="mt-1.5 flex gap-1"><span className="h-1.5 rounded-full bg-blue-500" style={{ flex: qr.seekers || 0.01 }} /><span className="h-1.5 rounded-full bg-violet-500" style={{ flex: qr.providers || 0.01 }} /></div>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-muted/20 px-3 py-2.5">
+              <div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Signups over time</span><span className="font-semibold text-emerald-600 dark:text-emerald-400">▲ {fmt(qr.brought7d)} last 7d · {fmt(qr.brought30d)} last 30d</span></div>
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground"><span>{qrDate(qr.firstSignup)}</span><span className="h-1.5 flex-1 rounded-full bg-gradient-to-r from-muted to-emerald-500/50" /><span>{qrDate(qr.lastSignup)}</span></div>
+            </div>
+          </div>
+        </div>
+      </>}
+    </DialogContent>
+  </Dialog>;
+}
 function QrPanel({ qrs, full }: { qrs: QrRow[]; full?: boolean }) {
   const [showAll, setShowAll] = useState(false);
+  const [selected, setSelected] = useState<QrRow | null>(null);
   const active = qrs.filter(r => r.brought > 0);
   const rest = qrs.filter(r => r.brought === 0);
   const shown: QrRow[] = showAll || active.length === 0 ? qrs : active;
   return <div className={cn("px-4 py-3", full && "md:col-span-2")}>
-    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">QR codes</span><span className="text-[11px] text-muted-foreground/70">which brought what</span></div>
+    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">QR codes</span><span className="text-[11px] text-muted-foreground/70">which brought what · click a row</span></div>
     <ul className="space-y-1">
-      {shown.map(r => <li key={r.linkId} className="flex items-center gap-2.5 rounded-lg border bg-muted/20 px-2.5 py-1.5">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-medium">{r.title}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
+      {shown.map(r => <li key={r.linkId}>
+        <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 px-2.5 py-1.5">
+          <button type="button" onClick={() => setSelected(r)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-colors hover:text-foreground">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-medium">{r.title}</div>
+              <div className="truncate text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
+            </div>
+            <div className="shrink-0 text-right leading-tight">
+              <div className="text-xs font-bold tabular-nums">{fmt(r.brought)}</div>
+              <div className={cn("text-[10px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `▲ ${fmt(r.brought30d)}` : "—"}</div>
+            </div>
+          </button>
+          <Button variant="outline" size="icon" disabled={!r.url} title="Download QR" className="h-7 w-7 shrink-0" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3.5 w-3.5" /></Button>
         </div>
-        <div className="shrink-0 text-right leading-tight">
-          <div className="text-xs font-bold tabular-nums">{fmt(r.brought)}</div>
-          <div className={cn("text-[10px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `▲ ${fmt(r.brought30d)}` : "—"}</div>
-        </div>
-        <Button variant="outline" size="icon" disabled={!r.url} title="Download QR" className="h-7 w-7 shrink-0" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3.5 w-3.5" /></Button>
       </li>)}
     </ul>
     {rest.length > 0 && active.length > 0 && !showAll && <button type="button" onClick={() => setShowAll(true)} className="mt-1.5 text-[11px] text-muted-foreground hover:text-foreground">Show {rest.length} more</button>}
+    <QrDetailDialog qr={selected} onClose={() => setSelected(null)} />
   </div>;
 }
 function SeekerRows({ instance, coordId, filters, from, to, source }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null; source: string | null }) {

@@ -39,15 +39,21 @@ export async function loadFieldCompletion(instance: string, coordinatorId: strin
   return { total: Number(r?.total ?? 0), role: Number(r?.role_filled ?? 0), location: Number(r?.location_filled ?? 0), experience: Number(r?.experience_filled ?? 0), age: Number(r?.age_filled ?? 0), education: Number(r?.education_filled ?? 0) };
 }
 
-export type QrRow = { linkId: string; title: string; location: string | null; eventDate: string | null; status: string; url: string; brought: number; brought30d: number };
+export type QrRow = { linkId: string; title: string; location: string | null; eventDate: string | null; status: string; url: string;
+  brought: number; brought30d: number; brought7d: number; seekers: number; providers: number;
+  liveProfiles: number; applied: number; avgCompleteness: number | null; firstSignup: string | null; lastSignup: string | null };
 
 export async function loadCoordinatorQrs(instance: string, coordinatorId: string): Promise<QrRow[]> {
   const db = blueDotsClient();
   const { data, error } = await db.rpc("get_bluedot_coordinator_qrs", { p_instance: instance, p_coordinator: coordinatorId });
   if (error) throw new Error("Couldn't load QR codes");
-  return ((data ?? []) as Array<{ link_id: string; title: string | null; location: string | null; event_date: string | null; status: string | null; registration_url: string | null; brought: number; brought_30d: number }>).map(r => ({
+  return ((data ?? []) as Array<{ link_id: string; title: string | null; location: string | null; event_date: string | null; status: string | null; registration_url: string | null; brought: number; brought_30d: number; brought_7d: number; seekers: number; providers: number; live_profiles: number; applied: number; avg_completeness: number | null; first_signup: string | null; last_signup: string | null }>).map(r => ({
     linkId: r.link_id, title: (r.title ?? "").trim() || "Untitled QR", location: r.location, eventDate: r.event_date,
     status: r.status ?? "live", url: r.registration_url ?? "", brought: Number(r.brought), brought30d: Number(r.brought_30d),
+    brought7d: Number(r.brought_7d), seekers: Number(r.seekers), providers: Number(r.providers),
+    liveProfiles: Number(r.live_profiles), applied: Number(r.applied),
+    avgCompleteness: r.avg_completeness === null || r.avg_completeness === undefined ? null : Number(r.avg_completeness),
+    firstSignup: r.first_signup, lastSignup: r.last_signup,
   }));
 }
 

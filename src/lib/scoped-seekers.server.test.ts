@@ -38,16 +38,16 @@ describe("one-RPC scoped seekers", () => {
 
 describe("coordinator QR codes", () => {
   it("forwards instance and coordinator scope and maps every QR field", async () => {
-    rpc.mockResolvedValue({ data: [{ link_id: "L1", title: "  Market Fair  ", location: "Ghaziabad", event_date: "2026-09-16", status: "live", registration_url: "https://x.example/r/L1", brought: 12, brought_30d: 3 }], error: null });
+    rpc.mockResolvedValue({ data: [{ link_id: "L1", title: "  Market Fair  ", location: "Ghaziabad", event_date: "2026-09-16", status: "live", registration_url: "https://x.example/r/L1", brought: 12, brought_30d: 3, brought_7d: 1, seekers: 9, providers: 3, live_profiles: 10, applied: 4, avg_completeness: 62, first_signup: "2026-08-01", last_signup: "2026-11-20" }], error: null });
     expect(await loadCoordinatorQrs("UP", "arm-id")).toEqual([
-      { linkId: "L1", title: "Market Fair", location: "Ghaziabad", eventDate: "2026-09-16", status: "live", url: "https://x.example/r/L1", brought: 12, brought30d: 3 },
+      { linkId: "L1", title: "Market Fair", location: "Ghaziabad", eventDate: "2026-09-16", status: "live", url: "https://x.example/r/L1", brought: 12, brought30d: 3, brought7d: 1, seekers: 9, providers: 3, liveProfiles: 10, applied: 4, avgCompleteness: 62, firstSignup: "2026-08-01", lastSignup: "2026-11-20" },
     ]);
     expect(rpc).toHaveBeenCalledWith("get_bluedot_coordinator_qrs", { p_instance: "UP", p_coordinator: "arm-id" });
   });
   it("falls back to Untitled QR, live status and an empty url for blank fields", async () => {
-    rpc.mockResolvedValue({ data: [{ link_id: "L2", title: "   ", location: null, event_date: null, status: null, registration_url: null, brought: 0, brought_30d: 0 }], error: null });
+    rpc.mockResolvedValue({ data: [{ link_id: "L2", title: "   ", location: null, event_date: null, status: null, registration_url: null, brought: 0, brought_30d: 0, brought_7d: 0, seekers: 0, providers: 0, live_profiles: 0, applied: 0, avg_completeness: null, first_signup: null, last_signup: null }], error: null });
     expect(await loadCoordinatorQrs("KA", "arm-id")).toEqual([
-      { linkId: "L2", title: "Untitled QR", location: null, eventDate: null, status: "live", url: "", brought: 0, brought30d: 0 },
+      { linkId: "L2", title: "Untitled QR", location: null, eventDate: null, status: "live", url: "", brought: 0, brought30d: 0, brought7d: 0, seekers: 0, providers: 0, liveProfiles: 0, applied: 0, avgCompleteness: null, firstSignup: null, lastSignup: null },
     ]);
   });
   it("rejects RPC errors without exposing database details", async () => {
