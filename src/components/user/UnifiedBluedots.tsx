@@ -71,7 +71,6 @@ const td = "px-3 py-2.5 text-right tabular-nums";
 function AggCells({ s }: { s: RollupStats }) {
   const rate = s.dots ? `${(s.applied / s.dots * 100).toFixed(1)}%` : null;
   const t = s.strong + s.moderate + s.weak;
-  const pct = t > 0 ? Math.round(s.strong / t * 100) : null;
   const split = SIG.map(x => `${x.label} ${fmt(s[x.key])}`).join(" · ");
   return <>
     <td className={td}>{fmt(s.dots)}</td>
@@ -79,7 +78,6 @@ function AggCells({ s }: { s: RollupStats }) {
     <td className={cn(td, s.draft ? "" : "text-muted-foreground")}>{fmt(s.draft)}</td>
     <td className="px-3 py-2.5">
       <div className="flex items-center justify-end gap-2">
-        <span className={cn("text-xs tabular-nums whitespace-nowrap", pct === null ? "text-muted-foreground" : "text-foreground")}>{pct === null ? "—" : `${pct}% strong`}</span>
         <TooltipProvider><Tooltip><TooltipTrigger asChild>
           <span tabIndex={0} aria-label={split} className="flex h-[9px] w-[120px] overflow-hidden rounded-full bg-muted">
             {t > 0 && SIG.filter(x => s[x.key] > 0).map(x => <span key={x.key} className={cn("h-full shrink-0", x.dot)} style={{ width: `${s[x.key] / t * 100}%` }} />)}
