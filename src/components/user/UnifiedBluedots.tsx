@@ -266,6 +266,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
   const totals = useMemo(() => seekerOrgs.reduce((t, s) => ({ new7d: t.new7d + s.new7d, active: t.active + s.active, atRisk: t.atRisk + s.atRisk, inactive: t.inactive + s.inactive, dots: t.dots + s.dots, applied: t.applied + s.applied, strong: t.strong + s.strong, moderate: t.moderate + s.moderate, weak: t.weak + s.weak, live: t.live + s.live, draft: t.draft + s.draft, compSum: t.compSum + s.compSum, compUsers: t.compUsers + s.compUsers, below60: t.below60 + s.below60 }), { new7d: 0, active: 0, atRisk: 0, inactive: 0, dots: 0, applied: 0, strong: 0, moderate: 0, weak: 0, live: 0, draft: 0, compSum: 0, compUsers: 0, below60: 0 } as RollupStats), [seekerOrgs]);
   const avgComp = totals.compUsers ? Math.round(totals.compSum / totals.compUsers) : null;
   const orgCount = seekerOrgs.length;
+  const providerTotals = useMemo(() => orgs.reduce((t, o) => ({ dots: t.dots + o.s.dots, new7d: t.new7d + o.s.new7d, active: t.active + o.s.active, inactive: t.inactive + o.s.inactive, lp: t.lp + o.lp }), { dots: 0, new7d: 0, active: 0, inactive: 0, lp: 0 }), [orgs]);
 
   if (live.loading && !orgs.length) return <LiveState loading retry={live.retry} />;
   if (live.isError || !live.available) return <LiveState loading={false} retry={live.retry} />;
@@ -278,6 +279,16 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
       <div className="flex items-center gap-3"><Freshness updatedAt={live.updatedAt} error={live.refreshError} /><Button variant="outline" size="sm" onClick={live.refresh} disabled={live.refreshing}><RefreshCw className={cn("mr-2 h-4 w-4", live.refreshing && "animate-spin")} />Refresh</Button></div>
     </div>
 
+    {view === "provider" ? (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-muted-foreground"><Users className="h-4 w-4 text-violet-600 dark:text-violet-400" /><span className="text-sm font-medium">Providers</span></div><div className="mt-3 text-3xl font-bold tabular-nums text-violet-600 dark:text-violet-400">{fmt(providerTotals.dots)}</div><div className="mt-1 text-xs text-muted-foreground">In this scope</div></div>
+        <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-muted-foreground"><Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /><span className="text-sm font-medium">New</span></div><div className="mt-3 text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{fmt(providerTotals.new7d)}</div><div className="mt-1 text-xs text-muted-foreground">Joined within the last 7 days</div></div>
+        <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-muted-foreground"><CircleCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" /><span className="text-sm font-medium">Active</span></div><div className="mt-3 text-3xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{fmt(providerTotals.active)}</div><div className="mt-1 text-xs text-muted-foreground">Has a live job posting</div></div>
+        <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-muted-foreground"><PauseCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" /><span className="text-sm font-medium">Inactive</span></div><div className="mt-3 text-3xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{fmt(providerTotals.inactive)}</div><div className="mt-1 text-xs text-muted-foreground">No live postings</div></div>
+        <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-muted-foreground"><FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" /><span className="text-sm font-medium">Live postings</span></div><div className="mt-3 text-3xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{fmt(providerTotals.lp)}</div><div className="mt-1 text-xs text-muted-foreground">Open across providers</div></div>
+        <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-muted-foreground"><Building2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /><span className="text-sm font-medium">Organisations</span></div><div className="mt-3 text-3xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{fmt(orgs.length)}</div><div className="mt-1 text-xs text-muted-foreground">In this scope</div></div>
+      </div>
+    ) : (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       {LIFE.map(l => <div key={l.status} className="rounded-xl border bg-card p-5">
         <div className="flex items-center gap-2 text-muted-foreground"><l.Icon className={cn("h-4 w-4", l.c)} /><span className="text-sm font-medium">{l.status}</span></div>
@@ -305,6 +316,7 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
         <div className="mt-1 text-xs text-muted-foreground">Participant-weighted</div>
       </div>
     </div>
+    )}
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
       <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />Scope</span>
@@ -341,6 +353,6 @@ export function UnifiedBluedots({ district, readOnly: _readOnly = false }: { dis
         </tbody>
       </table>}
     </div>
-    <p className="text-xs text-muted-foreground">Aggregate rows show seeker counts from the district rollup; per-outcome splits appear on seeker rows.</p>
+    <p className="text-xs text-muted-foreground">{view === "provider" ? "Aggregate rows show provider counts; drill a coordinator to list its providers." : "Aggregate rows show seeker counts from the district rollup; per-outcome splits appear on seeker rows."}</p>
   </section>;
 }
