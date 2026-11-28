@@ -26,3 +26,15 @@ export async function loadScopedSeekers(instance: string, coordinatorId: string,
   }));
   return { rows, capped };
 }
+
+export type FieldCompletion = { total: number; role: number; location: number; experience: number; age: number; education: number };
+
+export async function loadFieldCompletion(instance: string, coordinatorId: string, from?: string | null, to?: string | null, source?: string | null): Promise<FieldCompletion> {
+  const db = blueDotsClient();
+  const { data, error } = await db.rpc("get_bluedot_field_completion", {
+    p_instance: instance, p_coordinator: coordinatorId, p_from: from ?? null, p_to: to ?? null, p_source: source ?? null,
+  });
+  if (error) throw new Error("Couldn't load field completion");
+  const r = (Array.isArray(data) ? data[0] : data) as { total: number; role_filled: number; location_filled: number; experience_filled: number; age_filled: number; education_filled: number } | undefined;
+  return { total: Number(r?.total ?? 0), role: Number(r?.role_filled ?? 0), location: Number(r?.location_filled ?? 0), experience: Number(r?.experience_filled ?? 0), age: Number(r?.age_filled ?? 0), education: Number(r?.education_filled ?? 0) };
+}

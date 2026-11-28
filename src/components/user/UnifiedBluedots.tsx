@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRad
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveRollup, useLiveMembers, MemberTable, Freshness, LiveState } from "./live-rollup";
-import { fetchScopedSeekers, type ScopedSeekerRow } from "@/lib/scoped-seekers.functions";
+import { fetchScopedSeekers, fetchFieldCompletion, type ScopedSeekerRow, type FieldCompletion } from "@/lib/scoped-seekers.functions";
 import type { RollupStats } from "@/lib/rollup.functions";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
@@ -143,16 +143,40 @@ function passes(r: ScopedSeekerRow, f: Filters) {
   if (f.status !== "all" && r.status !== f.status) return false;
   return true;
 }
+const FIELDS: { key: "role" | "location" | "experience" | "age" | "education"; label: string }[] = [
+  { key: "role", label: "Job role" }, { key: "location", label: "Location" },
+  { key: "experience", label: "Experience" }, { key: "age", label: "Age" }, { key: "education", label: "Education" },
+];
+function FieldCompletionPanel({ fc }: { fc: FieldCompletion }) {
+  const items = FIELDS.map(f => ({ ...f, pct: fc.total ? Math.round((fc[f.key] as number) / fc.total * 100) : 0 })).sort((a, b) => a.pct - b.pct);
+  const bar = (p: number) => p < 40 ? "bg-rose-500" : p < 75 ? "bg-amber-500" : "bg-emerald-500";
+  const txt = (p: number) => p < 40 ? "text-rose-600 dark:text-rose-400" : p < 75 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
+  return <div className="border-t bg-muted/10 px-4 py-3">
+    <div className="mb-2.5 flex items-center gap-2"><span className="text-xs font-semibold text-foreground">Field completion</span><span className="text-[11px] text-muted-foreground">what to chase · {fmt(fc.total)} profiles</span></div>
+    <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+      {items.map(f => <div key={f.key} className="flex items-center gap-2.5">
+        <span className="w-20 shrink-0 text-xs text-muted-foreground">{f.label}</span>
+        <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", bar(f.pct))} style={{ width: `${f.pct}%` }} /></span>
+        <span className={cn("w-8 shrink-0 text-right text-xs font-medium tabular-nums", txt(f.pct))}>{f.pct}%</span>
+      </div>)}
+    </div>
+  </div>;
+}
 function SeekerRows({ instance, coordId, filters, from, to, source }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
   const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
+  const fcFn = useServerFn(fetchFieldCompletion);
+  const fcq = useQuery({ queryKey: ["field-completion", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fcFn({ data: { instance, coordinatorId: coordId, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading seekers…</td></tr>;
   if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load seekers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const rows = q.data.rows.filter(r => passes(r, filters));
-  return <tr className="border-t"><td colSpan={7} className="p-0"><SeekerTable rows={rows}>
-    {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
-    {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
-  </SeekerTable></td></tr>;
+  return <tr className="border-t"><td colSpan={7} className="p-0">
+    {fcq.data && fcq.data.total > 0 && <FieldCompletionPanel fc={fcq.data} />}
+    <SeekerTable rows={rows}>
+      {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
+      {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}
+    </SeekerTable>
+  </td></tr>;
 }
 function FlatRows({ instance, coords, filters, from, to, source }: { instance: string; coords: Agg[]; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
