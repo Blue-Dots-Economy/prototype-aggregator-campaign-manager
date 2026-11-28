@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("./blue-dots-auth.server", () => ({ blueDotsClient: () => ({ rpc }) }));
-import { loadScopedSeekers } from "./scoped-seekers.server";
+import { loadScopedSeekers, loadCoordinatorQrs } from "./scoped-seekers.server";
 
 const row = { item_id: "real-id", joined: null, profile_signal: "Strong", profile_completion: 100, status: "Active", applied: 8, accepted: 3, rejected: 2, pending: 1, services: 2, source: "QR" };
 beforeEach(() => rpc.mockReset());
@@ -33,5 +33,25 @@ describe("one-RPC scoped seekers", () => {
   it("rejects RPC errors without exposing database details", async () => {
     rpc.mockResolvedValue({ data: null, error: { message: "private database detail" } });
     await expect(loadScopedSeekers("UP", "arm-id")).rejects.toThrow("Couldn't load seekers");
+  });
+});
+
+describe("coordinator QR codes", () => {
+  it("forwards instance and coordinator scope and maps every QR field", async () => {
+    rpc.mockResolvedValue({ data: [{ link_id: "L1", title: "  Market Fair  ", location: "Ghaziabad", event_date: "2026-09-16", status: "live", registration_url: "https://x.example/r/L1", brought: 12, brought_30d: 3 }], error: null });
+    expect(await loadCoordinatorQrs("UP", "arm-id")).toEqual([
+      { linkId: "L1", title: "Market Fair", location: "Ghaziabad", eventDate: "2026-09-16", status: "live", url: "https://x.example/r/L1", brought: 12, brought30d: 3 },
+    ]);
+    expect(rpc).toHaveBeenCalledWith("get_bluedot_coordinator_qrs", { p_instance: "UP", p_coordinator: "arm-id" });
+  });
+  it("falls back to Untitled QR, live status and an empty url for blank fields", async () => {
+    rpc.mockResolvedValue({ data: [{ link_id: "L2", title: "   ", location: null, event_date: null, status: null, registration_url: null, brought: 0, brought_30d: 0 }], error: null });
+    expect(await loadCoordinatorQrs("KA", "arm-id")).toEqual([
+      { linkId: "L2", title: "Untitled QR", location: null, eventDate: null, status: "live", url: "", brought: 0, brought30d: 0 },
+    ]);
+  });
+  it("rejects RPC errors without exposing database details", async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: "private database detail" } });
+    await expect(loadCoordinatorQrs("UP", "arm-id")).rejects.toThrow("Couldn't load QR codes");
   });
 });

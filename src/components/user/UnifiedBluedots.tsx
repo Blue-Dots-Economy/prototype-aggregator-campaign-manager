@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X, Gauge, Building2, CircleCheck, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle, MapPin, RefreshCw, Sparkles, Users, AlertTriangle, PauseCircle, X, Gauge, Building2, CircleCheck, FileText, Download } from "lucide-react";
+import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useLiveRollup, useLiveMembers, MemberTable, Freshness, LiveState } from "./live-rollup";
-import { fetchScopedSeekers, fetchFieldCompletion, type ScopedSeekerRow, type FieldCompletion } from "@/lib/scoped-seekers.functions";
+import { fetchScopedSeekers, fetchFieldCompletion, fetchCoordinatorQrs, type ScopedSeekerRow, type FieldCompletion, type QrRow } from "@/lib/scoped-seekers.functions";
 import type { RollupStats } from "@/lib/rollup.functions";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
@@ -162,6 +163,41 @@ function FieldCompletionPanel({ fc }: { fc: FieldCompletion }) {
     </div>
   </div>;
 }
+async function downloadQr(url: string, title: string) {
+  try {
+    const dataUrl = await QRCode.toDataURL(url, { width: 640, margin: 2, errorCorrectionLevel: "M" });
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `${title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "qr"}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch { /* ignore */ }
+}
+function QrPanel({ instance, coordId }: { instance: string; coordId: string }) {
+  const fn = useServerFn(fetchCoordinatorQrs);
+  const q = useQuery({ queryKey: ["coord-qrs", instance, coordId], queryFn: () => fn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
+  const [showAll, setShowAll] = useState(false);
+  if (!q.data || q.data.length === 0) return null;
+  const active = q.data.filter(r => r.brought > 0);
+  const rest = q.data.filter(r => r.brought === 0);
+  const shown: QrRow[] = showAll || active.length === 0 ? q.data : active;
+  return <div className="border-t bg-muted/10 px-4 py-3">
+    <div className="mb-2.5 flex items-center gap-2"><span className="text-xs font-semibold text-foreground">QR codes</span><span className="text-[11px] text-muted-foreground">which brought what</span></div>
+    <ul className="space-y-1.5">
+      {shown.map(r => <li key={r.linkId} className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium">{r.title}</div>
+          <div className="text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-xs font-semibold tabular-nums">{fmt(r.brought)}</div>
+          <div className={cn("text-[11px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `+${fmt(r.brought30d)} · 30d` : "no recent"}</div>
+        </div>
+        <Button variant="outline" size="sm" disabled={!r.url} className="h-7 shrink-0 gap-1.5 px-2 text-xs" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3 w-3" />QR</Button>
+      </li>)}
+    </ul>
+    {rest.length > 0 && active.length > 0 && !showAll && <button type="button" onClick={() => setShowAll(true)} className="mt-2 text-[11px] text-muted-foreground hover:text-foreground">Show {rest.length} more with no signups yet</button>}
+  </div>;
+}
 function SeekerRows({ instance, coordId, filters, from, to, source }: { instance: string; coordId: string; filters: Filters; from: string | null; to: string | null; source: string | null }) {
   const fn = useServerFn(fetchScopedSeekers);
   const q = useQuery({ queryKey: ["scoped-seekers", instance, coordId, from ?? "", to ?? "", source ?? ""], queryFn: () => fn({ data: { instance, coordinatorId: coordId, from, to, source } }), placeholderData: keepPreviousData, staleTime: 5 * 60_000 });
@@ -172,6 +208,7 @@ function SeekerRows({ instance, coordId, filters, from, to, source }: { instance
   const rows = q.data.rows.filter(r => passes(r, filters));
   return <tr className="border-t"><td colSpan={7} className="p-0">
     {fcq.data && fcq.data.total > 0 && <FieldCompletionPanel fc={fcq.data} />}
+    <QrPanel instance={instance} coordId={coordId} />
     <SeekerTable rows={rows}>
       {!rows.length && <tr className="border-t"><td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">No seekers match.</td></tr>}
       {q.data.capped && <tr className="border-t"><td colSpan={9} className="px-3 py-2 text-xs text-muted-foreground">Showing first 1,000 profiles.</td></tr>}

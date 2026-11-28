@@ -38,3 +38,15 @@ export async function loadFieldCompletion(instance: string, coordinatorId: strin
   const r = (Array.isArray(data) ? data[0] : data) as { total: number; role_filled: number; location_filled: number; experience_filled: number; age_filled: number; education_filled: number } | undefined;
   return { total: Number(r?.total ?? 0), role: Number(r?.role_filled ?? 0), location: Number(r?.location_filled ?? 0), experience: Number(r?.experience_filled ?? 0), age: Number(r?.age_filled ?? 0), education: Number(r?.education_filled ?? 0) };
 }
+
+export type QrRow = { linkId: string; title: string; location: string | null; eventDate: string | null; status: string; url: string; brought: number; brought30d: number };
+
+export async function loadCoordinatorQrs(instance: string, coordinatorId: string): Promise<QrRow[]> {
+  const db = blueDotsClient();
+  const { data, error } = await db.rpc("get_bluedot_coordinator_qrs", { p_instance: instance, p_coordinator: coordinatorId });
+  if (error) throw new Error("Couldn't load QR codes");
+  return ((data ?? []) as Array<{ link_id: string; title: string | null; location: string | null; event_date: string | null; status: string | null; registration_url: string | null; brought: number; brought_30d: number }>).map(r => ({
+    linkId: r.link_id, title: (r.title ?? "").trim() || "Untitled QR", location: r.location, eventDate: r.event_date,
+    status: r.status ?? "live", url: r.registration_url ?? "", brought: Number(r.brought), brought30d: Number(r.brought_30d),
+  }));
+}

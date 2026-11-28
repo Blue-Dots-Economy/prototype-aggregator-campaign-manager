@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { ScopedSeekers, FieldCompletion } from "./scoped-seekers.server";
-export type { ScopedSeekers, ScopedSeekerRow, FieldCompletion } from "./scoped-seekers.server";
+import type { ScopedSeekers, FieldCompletion, QrRow } from "./scoped-seekers.server";
+export type { ScopedSeekers, ScopedSeekerRow, FieldCompletion, QrRow } from "./scoped-seekers.server";
 
 export const fetchScopedSeekers = createServerFn({ method: "POST" })
   .inputValidator((d: { instance: string; coordinatorId: string; from?: string | null; to?: string | null; source?: string | null }) => {
@@ -28,4 +28,18 @@ export const fetchFieldCompletion = createServerFn({ method: "POST" })
     if (scoped.coordinatorId && scoped.coordinatorId !== data.coordinatorId) throw new Error("Unauthorized");
     const { loadFieldCompletion } = await import("./scoped-seekers.server");
     return loadFieldCompletion(scoped.instance, data.coordinatorId, data.from, data.to, data.source);
+  });
+
+export const fetchCoordinatorQrs = createServerFn({ method: "POST" })
+  .inputValidator((d: { instance: string; coordinatorId: string }) => {
+    if (!["UP", "KA"].includes(d.instance) || typeof d.coordinatorId !== "string" || !d.coordinatorId || d.coordinatorId.length > 150) throw new Error("Invalid scope");
+    return { instance: d.instance, coordinatorId: d.coordinatorId };
+  })
+  .handler(async ({ data }): Promise<QrRow[]> => {
+    const { blueDotsScope } = await import("./blue-dots-auth.server");
+    const scoped = await blueDotsScope({ instance: data.instance, coordinatorId: data.coordinatorId });
+    if (scoped.aggregatorId) throw new Error("Unauthorized");
+    if (scoped.coordinatorId && scoped.coordinatorId !== data.coordinatorId) throw new Error("Unauthorized");
+    const { loadCoordinatorQrs } = await import("./scoped-seekers.server");
+    return loadCoordinatorQrs(scoped.instance, data.coordinatorId);
   });
