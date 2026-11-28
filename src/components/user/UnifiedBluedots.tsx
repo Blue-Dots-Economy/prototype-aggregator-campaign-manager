@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useLiveRollup, useLiveMembers, MemberTable, Freshness, LiveState } from "./live-rollup";
-import { fetchScopedSeekers, fetchFieldCompletion, fetchCoordinatorQrs, type ScopedSeekerRow, type FieldCompletion, type QrRow } from "@/lib/scoped-seekers.functions";
+import { useLiveRollup, useLiveMembers, Freshness, LiveState } from "./live-rollup";
+import { fetchScopedSeekers, fetchFieldCompletion, fetchCoordinatorQrs, fetchProviderFieldCompletion, type ScopedSeekerRow, type FieldCompletion, type QrRow, type ProviderFieldCompletion } from "@/lib/scoped-seekers.functions";
 import type { RollupStats } from "@/lib/rollup.functions";
+import type { RollupMember } from "@/lib/rollup.functions";
 
 const INSTANCE: Record<string, string> = { Ghaziabad: "UP", "Hubli-Dharwad": "KA", GZB: "UP", Dharwad: "KA", Karnataka: "KA", UP: "UP", KA: "KA" };
 type Status = ScopedSeekerRow["status"];
@@ -47,8 +48,21 @@ function ProviderCells({ s, lp }: { s: RollupStats; lp: number }) {
 }
 function ProviderRows({ instance, coordId }: { instance: string; coordId: string }) {
   const q = useLiveMembers(instance, undefined, coordId, "provider", true);
+  const pfFn = useServerFn(fetchProviderFieldCompletion);
+  const pfq = useQuery({ queryKey: ["provider-fields", instance, coordId], queryFn: () => pfFn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
+  const qrFn = useServerFn(fetchCoordinatorQrs);
+  const qrq = useQuery({ queryKey: ["coord-qrs", instance, coordId], queryFn: () => qrFn({ data: { instance, coordinatorId: coordId } }), staleTime: 5 * 60_000 });
   if (q.isPending) return <tr className="border-t bg-muted/20"><td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground"><LoaderCircle className="mr-2 inline h-3.5 w-3.5 animate-spin" />Loading providers…</td></tr>;
-  return <tr className="border-t"><td colSpan={6} className="p-2"><MemberTable members={q.data ?? []} /></td></tr>;
+  const members = q.data ?? [];
+  const hasPf = !!pfq.data && pfq.data.total > 0;
+  const hasQr = !!qrq.data && qrq.data.length > 0;
+  return <tr className="border-t"><td colSpan={6} className="p-0">
+    {(hasPf || hasQr) && <div className="grid border-t divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+      {hasPf && <ProviderFieldPanel pf={pfq.data!} full={!hasQr} />}
+      {hasQr && <QrPanel qrs={qrq.data!} full={!hasPf} />}
+    </div>}
+    <ProviderTable members={members} />
+  </td></tr>;
 }
 type Filters = { time: "all" | "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month"; signal: "all" | ScopedSeekerRow["profileSignal"]; status: "all" | Status };
 
@@ -148,18 +162,61 @@ const FIELDS: { key: "role" | "location" | "experience" | "age" | "education"; l
   { key: "role", label: "Job role" }, { key: "location", label: "Location" },
   { key: "experience", label: "Experience" }, { key: "age", label: "Age" }, { key: "education", label: "Education" },
 ];
-function FieldCompletionPanel({ fc, full }: { fc: FieldCompletion; full?: boolean }) {
-  const items = FIELDS.map(f => ({ ...f, pct: fc.total ? Math.round((fc[f.key] as number) / fc.total * 100) : 0 })).sort((a, b) => a.pct - b.pct);
+function FieldBars({ caption, items, full }: { caption: string; items: { label: string; pct: number }[]; full?: boolean }) {
+  const sorted = [...items].sort((a, b) => a.pct - b.pct);
   const bar = (p: number) => p < 40 ? "bg-rose-500" : p < 75 ? "bg-amber-500" : "bg-emerald-500";
   const txt = (p: number) => p < 40 ? "text-rose-600 dark:text-rose-400" : p < 75 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400";
   return <div className={cn("px-4 py-3", full && "md:col-span-2")}>
-    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Field completion</span><span className="text-[11px] text-muted-foreground/70">what to chase · {fmt(fc.total)}</span></div>
+    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Field completion</span><span className="text-[11px] text-muted-foreground/70">{caption}</span></div>
     <div className="space-y-1.5">
-      {items.map(f => <div key={f.key} className="flex items-center gap-2.5">
+      {sorted.map(f => <div key={f.label} className="flex items-center gap-2.5">
         <span className="w-16 shrink-0 text-[11px] text-muted-foreground">{f.label}</span>
         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className={cn("block h-full rounded-full", bar(f.pct))} style={{ width: `${f.pct}%` }} /></span>
         <span className={cn("w-7 shrink-0 text-right text-[11px] font-semibold tabular-nums", txt(f.pct))}>{f.pct}%</span>
       </div>)}
+    </div>
+  </div>;
+}
+function FieldCompletionPanel({ fc, full }: { fc: FieldCompletion; full?: boolean }) {
+  const items = FIELDS.map(f => ({ label: f.label, pct: fc.total ? Math.round((fc[f.key] as number) / fc.total * 100) : 0 }));
+  return <FieldBars caption={`what to chase · ${fmt(fc.total)}`} items={items} full={full} />;
+}
+const PFIELDS: { key: "role" | "pay" | "positions" | "experience" | "education"; label: string }[] = [
+  { key: "role", label: "Job role" }, { key: "pay", label: "Pay" }, { key: "positions", label: "Positions" },
+  { key: "experience", label: "Experience" }, { key: "education", label: "Education" },
+];
+function ProviderFieldPanel({ pf, full }: { pf: ProviderFieldCompletion; full?: boolean }) {
+  const items = PFIELDS.map(f => ({ label: f.label, pct: pf.total ? Math.round((pf[f.key] as number) / pf.total * 100) : 0 }));
+  return <FieldBars caption={`postings to complete · ${fmt(pf.total)}`} items={items} full={full} />;
+}
+const LIFECOLOR: Record<string, string> = {
+  New: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  Active: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  "At Risk": "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  Inactive: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+};
+function ProviderTable({ members }: { members: RollupMember[] }) {
+  const joined = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); };
+  const live = members.reduce((n, m) => n + m.livePostings, 0);
+  const apps = members.reduce((n, m) => n + m.applications, 0);
+  return <div className="bg-muted/20">
+    <p className="px-3 py-3 text-xs text-muted-foreground">{fmt(members.length)} providers · {fmt(live)} live postings · {fmt(apps)} applications</p>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm" aria-label="Providers">
+        <thead className="border-t bg-muted/50 text-xs text-muted-foreground"><tr>
+          {["Provider", "Joined", "Apps", "Live postings", "Status"].map((h, i) => <th key={h} scope="col" className={cn("px-3 py-2 font-medium whitespace-nowrap", i >= 2 && i <= 3 ? "text-right" : "text-left")}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {members.map(m => <tr key={m.id} className="border-t hover:bg-muted/30">
+            <td className="px-3 py-2.5"><span className="font-mono text-xs break-all text-muted-foreground">{m.id}</span></td>
+            <td className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">{joined(m.joined)}</td>
+            <td className={cn(td, m.applications ? "" : "text-muted-foreground")}>{fmt(m.applications)}</td>
+            <td className={cn(td, m.livePostings ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground")}>{fmt(m.livePostings)}</td>
+            <td className="px-3 py-2.5"><span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", LIFECOLOR[m.lifecycle] ?? "")}>{m.lifecycle}</span></td>
+          </tr>)}
+          {!members.length && <tr className="border-t"><td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">No providers found.</td></tr>}
+        </tbody>
+      </table>
     </div>
   </div>;
 }

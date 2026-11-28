@@ -50,3 +50,15 @@ export async function loadCoordinatorQrs(instance: string, coordinatorId: string
     status: r.status ?? "live", url: r.registration_url ?? "", brought: Number(r.brought), brought30d: Number(r.brought_30d),
   }));
 }
+
+export type ProviderFieldCompletion = { total: number; role: number; pay: number; positions: number; experience: number; education: number };
+
+export async function loadProviderFieldCompletion(instance: string, coordinatorId: string, from?: string | null, to?: string | null): Promise<ProviderFieldCompletion> {
+  const db = blueDotsClient();
+  const { data, error } = await db.rpc("get_bluedot_provider_field_completion", {
+    p_instance: instance, p_coordinator: coordinatorId, p_from: from ?? null, p_to: to ?? null,
+  });
+  if (error) throw new Error("Couldn't load provider field completion");
+  const r = (Array.isArray(data) ? data[0] : data) as { total: number; role_filled: number; pay_filled: number; positions_filled: number; experience_filled: number; education_filled: number } | undefined;
+  return { total: Number(r?.total ?? 0), role: Number(r?.role_filled ?? 0), pay: Number(r?.pay_filled ?? 0), positions: Number(r?.positions_filled ?? 0), experience: Number(r?.experience_filled ?? 0), education: Number(r?.education_filled ?? 0) };
+}
