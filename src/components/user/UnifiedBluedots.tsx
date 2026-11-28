@@ -57,11 +57,11 @@ function ProviderRows({ instance, coordId }: { instance: string; coordId: string
   if (q.isError) return <tr className="border-t bg-muted/20"><td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground">Couldn't load providers. <Button variant="link" size="sm" onClick={() => void q.refetch()}>Retry</Button></td></tr>;
   const rows = q.data.rows;
   const hasPf = !!pfq.data && pfq.data.total > 0;
-  const hasQr = !!qrq.data && qrq.data.length > 0;
+  const qrReady = !!qrq.data;
   return <tr className="border-t"><td colSpan={6} className="p-0">
-    {(hasPf || hasQr) && <div className="grid border-t divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-      {hasPf && <ProviderFieldPanel pf={pfq.data!} full={!hasQr} />}
-      {hasQr && <QrPanel qrs={qrq.data!} full={!hasPf} />}
+    {(hasPf || qrReady) && <div className="grid border-t divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+      {hasPf && <ProviderFieldPanel pf={pfq.data!} full={!qrReady} />}
+      {qrReady && <QrPanel qrs={qrq.data!} full={!hasPf} />}
     </div>}
     <ProviderTable rows={rows}>
       {!rows.length && <tr className="border-t"><td colSpan={7} className="px-3 py-3 text-xs text-muted-foreground">No providers found.</td></tr>}
@@ -301,25 +301,29 @@ function QrPanel({ qrs, full }: { qrs: QrRow[]; full?: boolean }) {
   const rest = qrs.filter(r => r.brought === 0);
   const shown: QrRow[] = showAll || active.length === 0 ? qrs : active;
   return <div className={cn("px-4 py-3", full && "md:col-span-2")}>
-    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">QR codes</span><span className="text-[11px] text-muted-foreground/70">which brought what · click a row</span></div>
-    <ul className="space-y-1">
-      {shown.map(r => <li key={r.linkId}>
-        <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 px-2.5 py-1.5">
-          <button type="button" onClick={() => setSelected(r)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-colors hover:text-foreground">
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium">{r.title}</div>
-              <div className="truncate text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
+    <div className="mb-2 flex items-center gap-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">QR codes</span><span className="text-[11px] text-muted-foreground/70">{qrs.length ? "which brought what · click a row" : "which brought what"}</span></div>
+    {qrs.length === 0
+      ? <p className="rounded-lg border border-dashed bg-muted/10 px-3 py-4 text-center text-[11px] text-muted-foreground">No QR codes yet. Attribution will appear here once registration links are added for this coordinator.</p>
+      : <>
+        <ul className="space-y-1">
+          {shown.map(r => <li key={r.linkId}>
+            <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 px-2.5 py-1.5">
+              <button type="button" onClick={() => setSelected(r)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-colors hover:text-foreground">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium">{r.title}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">{[r.location, r.eventDate, r.status !== "live" ? r.status : null].filter(Boolean).join(" · ") || "—"}</div>
+                </div>
+                <div className="shrink-0 text-right leading-tight">
+                  <div className="text-xs font-bold tabular-nums">{fmt(r.brought)}</div>
+                  <div className={cn("text-[10px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `▲ ${fmt(r.brought30d)}` : "—"}</div>
+                </div>
+              </button>
+              <Button variant="outline" size="icon" disabled={!r.url} title="Download QR" className="h-7 w-7 shrink-0" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3.5 w-3.5" /></Button>
             </div>
-            <div className="shrink-0 text-right leading-tight">
-              <div className="text-xs font-bold tabular-nums">{fmt(r.brought)}</div>
-              <div className={cn("text-[10px] tabular-nums", r.brought30d > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{r.brought30d > 0 ? `▲ ${fmt(r.brought30d)}` : "—"}</div>
-            </div>
-          </button>
-          <Button variant="outline" size="icon" disabled={!r.url} title="Download QR" className="h-7 w-7 shrink-0" onClick={() => downloadQr(r.url, r.title)}><Download className="h-3.5 w-3.5" /></Button>
-        </div>
-      </li>)}
-    </ul>
-    {rest.length > 0 && active.length > 0 && !showAll && <button type="button" onClick={() => setShowAll(true)} className="mt-1.5 text-[11px] text-muted-foreground hover:text-foreground">Show {rest.length} more</button>}
+          </li>)}
+        </ul>
+        {rest.length > 0 && active.length > 0 && !showAll && <button type="button" onClick={() => setShowAll(true)} className="mt-1.5 text-[11px] text-muted-foreground hover:text-foreground">Show {rest.length} more</button>}
+      </>}
     <QrDetailDialog qr={selected} onClose={() => setSelected(null)} />
   </div>;
 }
@@ -336,11 +340,11 @@ function SeekerRows({ instance, coordId, filters, from, to, source }: { instance
   return <tr className="border-t"><td colSpan={7} className="p-0">
     {(() => {
       const hasFc = !!fcq.data && fcq.data.total > 0;
-      const hasQr = !!qrq.data && qrq.data.length > 0;
-      if (!hasFc && !hasQr) return null;
+      const qrReady = !!qrq.data;
+      if (!hasFc && !qrReady) return null;
       return <div className="grid border-t divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-        {hasFc && <FieldCompletionPanel fc={fcq.data!} full={!hasQr} />}
-        {hasQr && <QrPanel qrs={qrq.data!} full={!hasFc} />}
+        {hasFc && <FieldCompletionPanel fc={fcq.data!} full={!qrReady} />}
+        {qrReady && <QrPanel qrs={qrq.data!} full={!hasFc} />}
       </div>;
     })()}
     <SeekerTable rows={rows}>
